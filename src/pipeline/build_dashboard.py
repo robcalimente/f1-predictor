@@ -436,27 +436,29 @@ def scatter_figure(wf: pd.DataFrame) -> go.Figure:
 
 
 def headline_cards_html(metrics: dict) -> str:
+    fp = metrics.get("finish_position", {})
+    cards = []
+
+    def tile(value_str, label):
+        cards.append(f'<div class="stat-tile"><div class="value mono">{value_str}</div><div class="label">{label}</div></div>')
+
+    if fp.get("winner_accuracy") is not None:
+        tile(f"{fp['winner_accuracy']:.0%}", "Race winner called correctly")
+    if fp.get("podium_accuracy") is not None:
+        tile(f"{fp['podium_accuracy']:.0%}", "Exact podium match rate")
+    if fp.get("top10_overlap") is not None:
+        tile(f"{fp['top10_overlap']:.0%}", "Avg. overlap with actual points scorers")
+
     labels = {
         "quali_pace": ("Qualifying pace MAE", "% gap to pole"),
         "finish_position": ("Finish position MAE", "positions"),
         "points": ("Points MAE", "points"),
     }
-    cards = []
     for target, (label, unit) in labels.items():
-        m = metrics.get(target, {})
-        val = m.get("headline_mae")
-        if val is None:
-            continue
-        cards.append(
-            f'<div class="stat-tile"><div class="value mono">{val:.2f}</div>'
-            f'<div class="label">{label} ({unit})</div></div>'
-        )
-    podium = metrics.get("finish_position", {}).get("podium_accuracy")
-    if podium is not None:
-        cards.append(
-            f'<div class="stat-tile"><div class="value mono">{podium:.0%}</div>'
-            f'<div class="label">Exact podium match rate</div></div>'
-        )
+        val = metrics.get(target, {}).get("headline_mae")
+        if val is not None:
+            tile(f"{val:.2f}", f"{label} ({unit})")
+
     return f'<div class="stat-rail">{"".join(cards)}</div>'
 
 
@@ -503,6 +505,54 @@ the result beat the prediction, red means it missed.</p>
 <footer>Built from FastF1 data. See <a href="methodology.html">how this works</a> for the full methodology.</footer>
 </div>
 </body></html>"""
+
+
+def accuracy_detail_html(metrics: dict) -> str:
+    fp = metrics.get("finish_position", {})
+    qp = metrics.get("quali_pace", {})
+    pts = metrics.get("points", {})
+
+    def row(label, *vals):
+        cells = "".join(f"<td class='num mono'>{v}</td>" for v in vals)
+        return f"<tr><td>{label}</td>{cells}</tr>"
+
+    def pct(v):
+        return f"{v:.1%}" if v is not None else "—"
+
+    def num(v):
+        return f"{v:.3f}" if v is not None else "—"
+
+    table = f"""
+    <div class="table-scroll">
+    <table>
+      <tr><th>Target</th><th class="num">MAE</th><th class="num">R²</th><th class="num">Spearman ρ</th></tr>
+      {row("Qualifying pace (% gap to pole)", num(qp.get('headline_mae')), num(qp.get('r_squared')), num(qp.get('spearman_rank_correlation')))}
+      {row("Finishing position", num(fp.get('headline_mae')), num(fp.get('r_squared')), num(fp.get('spearman_rank_correlation')))}
+      {row("Points", num(pts.get('headline_mae')), num(pts.get('r_squared')), num(pts.get('spearman_rank_correlation')))}
+    </table>
+    </div>
+
+    <div class="table-scroll" style="margin-top:1rem">
+    <table>
+      <tr><th>Set-based accuracy</th><th class="num">Rate</th></tr>
+      {row("Winner called correctly", pct(fp.get('winner_accuracy')))}
+      {row("Exact podium (top 3) match", pct(fp.get('podium_accuracy')))}
+      {row("Exact points-scorers (top 10) match", pct(fp.get('top10_accuracy')))}
+      {row("Avg. overlap with actual points scorers", pct(fp.get('top10_overlap')))}
+      {row("Pole position called correctly", pct(qp.get('pole_accuracy')))}
+    </table>
+    </div>
+
+    <p class="note" style="margin-top:1rem">
+    <strong>On the baseline comparison:</strong> a naive "everyone finishes where they qualified, nobody
+    overtakes" baseline scores {num(fp.get('grid_order_baseline_mae'))} MAE on this same set of races — almost
+    identical to the model's {num(fp.get('headline_mae'))}. That's not a hidden weakness so much as a fact about
+    modern F1: on most tracks, grid position already explains most of the finishing order, because overtaking
+    is hard. Spearman rank correlation ({num(fp.get('spearman_rank_correlation'))}) and the points R²
+    ({num(pts.get('r_squared'))}) are the more informative numbers here — they show the model captures who
+    outperforms their grid slot, not just who started where.</p>
+    """
+    return f'<h2>Accuracy in detail</h2>{table}'
 
 
 def build_methodology_html(metrics: dict, shap_importance: dict | None, generated_at: str) -> str:
@@ -556,6 +606,8 @@ plus the track archetype and whether it's a sprint weekend.</p>
 before it, then evaluated on that season's actual results. Predictions are never made using data from the
 future relative to the race being predicted — this is the same discipline a real forecasting system needs,
 not a random train/test split, which would leak future information into training.</p>
+
+{accuracy_detail_html(metrics)}
 
 {shap_html}
 

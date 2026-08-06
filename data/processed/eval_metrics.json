@@ -1,6 +1,8 @@
 {
   "quali_pace": {
     "headline_mae": 1.3091591333179613,
+    "r_squared": -0.01962059987671605,
+    "spearman_rank_correlation": 0.5338729237078353,
     "n_predictions": 2798,
     "per_race": [
       {
@@ -849,10 +851,13 @@
         "mae": 0.8291964071060594,
         "n_drivers": 22
       }
-    ]
+    ],
+    "pole_accuracy": 0.16312056737588654
   },
   "finish_position": {
     "headline_mae": 2.9561567144927,
+    "r_squared": 0.4634521468928149,
+    "spearman_rank_correlation": 0.6723300231570362,
     "n_predictions": 2424,
     "per_race": [
       {
@@ -1702,10 +1707,17 @@
         "n_drivers": 19
       }
     ],
-    "podium_accuracy": 0.10638297872340426
+    "podium_accuracy": 0.10638297872340426,
+    "winner_accuracy": 0.3475177304964539,
+    "top10_accuracy": 0.05673758865248227,
+    "top10_overlap": 0.7992907801418438,
+    "grid_order_baseline_mae": 2.93523102310231,
+    "improvement_over_baseline_pct": -0.007129146300815902
   },
   "points": {
     "headline_mae": 3.8055224667647534,
+    "r_squared": 0.48215275219826326,
+    "spearman_rank_correlation": 0.6708807988730376,
     "n_predictions": 2424,
     "per_race": [
       {
