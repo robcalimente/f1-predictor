@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+.fastf1_cache/
+data/raw/
+.DS_Store
+*.egg-info/

@@ -1,0 +1,29 @@
+circuit,country,archetype,notes
+Bahrain International Circuit,Bahrain,high_speed_power,Long straights and heavy braking zones
+Jeddah Corniche Circuit,Saudi Arabia,street,High-speed street circuit but still a street layout
+Albert Park,Australia,medium_hybrid,"Semi-street, mix of fast and technical sections"
+Suzuka,Japan,medium_hybrid,"Classic flowing layout, high-speed and technical mixed"
+Shanghai International Circuit,China,medium_hybrid,"Long straights with tight technical sections"
+Miami International Autodrome,USA,street,Street/parking-lot circuit
+Autodromo Enzo e Dino Ferrari (Imola),Italy,elevation_change,"Old-school, elevation changes and blind corners"
+Circuit de Monaco,Monaco,technical_low_speed,Tightest and slowest circuit on the calendar
+Circuit de Barcelona-Catalunya,Spain,medium_hybrid,"Balanced, technical and medium/high speed corners"
+Circuit de Spa-Francorchamps,Belgium,elevation_change,"Major elevation change, very fast"
+Red Bull Ring,Austria,high_speed_power,"Short lap, big power sensitivity"
+Silverstone,UK,high_speed_power,"High-speed corners, low downforce sensitivity"
+Hungaroring,Hungary,technical_low_speed,"Tight and twisty, low overtaking"
+Circuit Zandvoort,Netherlands,technical_low_speed,"Banked, narrow, technical"
+Monza,Italy,high_speed_power,"Lowest downforce circuit, pure power sensitivity"
+Baku City Circuit,Azerbaijan,street,Street circuit with a very long straight
+Marina Bay Street Circuit,Singapore,street,"Slow, bumpy, high-stress street circuit"
+Circuit of the Americas,USA,elevation_change,"Elevation changes, mixed corner speeds"
+Autodromo Hermanos Rodriguez,Mexico,elevation_change,High altitude with thin air aero effects
+Interlagos,Brazil,elevation_change,"Elevation changes, variable weather"
+Las Vegas Strip Circuit,USA,street,"Long straights, street circuit"
+Losail International Circuit,Qatar,high_speed_power,"Flowing, high-speed corners"
+Yas Marina Circuit,UAE,medium_hybrid,Mix of tight and fast sections
+Nurburgring,Germany,elevation_change,"Elevation changes, technical (used in COVID-era calendar)"
+Portimao (Algarve),Portugal,elevation_change,Significant elevation changes
+Mugello,Italy,high_speed_power,"High-speed, flowing (used in COVID-era calendar)"
+Istanbul Park,Turkey,medium_hybrid,"Famous banked Turn 8, mixed speed"
+Sochi Autodrom,Russia,medium_hybrid,"Long straights, technical infield (removed from calendar 2022)"
