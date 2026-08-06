@@ -103,6 +103,19 @@ def main():
             print(f"{year}: no data returned (season may not have started yet)")
             continue
 
+        if out_path.exists():
+            existing_rows = len(pd.read_parquet(out_path))
+            # A rate-limited or otherwise partial re-pull of the current
+            # season must never clobber a more-complete previous pull --
+            # this happened once already (a CI run got rate-limited and
+            # silently overwrote a full season with a handful of rows).
+            if len(df) < existing_rows:
+                print(
+                    f"{year}: new pull has fewer rows ({len(df)}) than the existing "
+                    f"file ({existing_rows}) -- keeping the existing file, not overwriting"
+                )
+                continue
+
         df.to_parquet(out_path, index=False)
         print(f"{year}: wrote {len(df)} rows to {out_path}")
 
