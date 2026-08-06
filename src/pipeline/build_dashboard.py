@@ -1,8 +1,16 @@
 """Render the static dashboard: docs/index.html (next-race predictions +
-history browser) and docs/methodology.html (how-this-works page). No
-backend -- everything is baked into the HTML at build time, safe for
-GitHub Pages.
+a race-by-race history browser) and docs/methodology.html. No backend --
+history browsing is client-side JS filtering over a JSON payload embedded
+in the page, so it works on GitHub Pages with no server.
+
+Design: a live-timing-tower aesthetic (the actual on-subject reference for
+an F1 data product, not a generic dashboard template) -- near-black surface,
+monospace tabular figures for every timing/points column, an amber accent
+for structure (headers, active state), and real team colors as identity
+chips on each row. Status colors (beat/missed prediction) are fixed, never
+themed, and always paired with an icon + label, never color alone.
 """
+import datetime
 import json
 from pathlib import Path
 
@@ -22,80 +30,388 @@ ARCHETYPE_LABELS = {
     "medium_hybrid": "Medium / hybrid",
 }
 
-PAGE_STYLE = """
+# Real team liveries. A team rename (e.g. Toro Rosso -> AlphaTauri -> RB)
+# keeps a related but distinct hue so the lineage is still legible at a
+# glance; colors are identity chips always paired with the team name text,
+# never the sole carrier of meaning.
+TEAM_COLORS = {
+    "Ferrari": "#E8002D",
+    "Mercedes": "#00D7B6",
+    "Red Bull Racing": "#3671C6",
+    "Red Bull": "#3671C6",
+    "McLaren": "#FF8000",
+    "Alpine": "#2293D1",
+    "Renault": "#FFF200",
+    "Racing Point": "#F596C8",
+    "Aston Martin": "#229971",
+    "Williams": "#64C4FF",
+    "Haas F1 Team": "#B6BABD",
+    "Alfa Romeo": "#C92D4B",
+    "Alfa Romeo Racing": "#C92D4B",
+    "AlphaTauri": "#2B4562",
+    "Toro Rosso": "#469BFF",
+    "RB": "#6C98FF",
+    "Racing Bulls": "#6C98FF",
+    "Sauber": "#52E252",
+    "Kick Sauber": "#52E252",
+    "Cadillac": "#8A6D00",
+    "Audi": "#BB0A30",
+}
+DEFAULT_TEAM_COLOR = "#5A6172"
+
+# Dataviz-validated categorical slots (dark-surface steps), used only for
+# the three single-series scatter panels below -- one hue per panel, no
+# legend needed since each panel is one series.
+CHART_BLUE = "#3987e5"
+CHART_ORANGE = "#d95926"
+CHART_AQUA = "#199e70"
+# Fixed status palette (never themed) -- dark-surface steps.
+STATUS_GOOD = "#0ca30c"
+STATUS_CRITICAL = "#d03b3b"
+
+PAGE_STYLE_TEMPLATE = """
 <style>
-  :root { color-scheme: dark light; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-         background: #0e1116; color: #e6e6e6; margin: 0; padding: 0 1.5rem 3rem; }
-  a { color: #e10600; }
-  h1 { font-size: 1.9rem; margin-top: 2rem; }
-  h2 { font-size: 1.3rem; margin-top: 2.5rem; border-bottom: 1px solid #2a2f3a; padding-bottom: .4rem; }
-  .subtitle { color: #9aa0ab; margin-top: -.5rem; }
-  nav { padding: 1rem 0; border-bottom: 1px solid #2a2f3a; }
-  nav a { margin-right: 1.5rem; text-decoration: none; font-weight: 600; }
-  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
-  th, td { text-align: left; padding: .4rem .8rem; border-bottom: 1px solid #2a2f3a; }
-  th { color: #9aa0ab; font-weight: 600; font-size: .85rem; text-transform: uppercase; }
-  .headline-row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin: 1.5rem 0; }
-  .headline-card { background: #171b22; border: 1px solid #2a2f3a; border-radius: 10px;
-                    padding: 1rem 1.4rem; min-width: 180px; }
-  .headline-card .value { font-size: 1.8rem; font-weight: 700; }
-  .headline-card .label { color: #9aa0ab; font-size: .85rem; }
-  select { background: #171b22; color: #e6e6e6; border: 1px solid #2a2f3a; padding: .4rem;
-           border-radius: 6px; margin-bottom: 1rem; }
-  .note { color: #9aa0ab; font-size: .9rem; }
-  footer { margin-top: 3rem; color: #6b7280; font-size: .85rem; }
+  :root {
+    color-scheme: dark;
+    --bg: #0a0c10;
+    --surface: #14171d;
+    --surface-raised: #1b1f27;
+    --border: #262b35;
+    --text: #edeff3;
+    --text-muted: #8d94a3;
+    --accent: #e3a63f;
+    --good: __GOOD__;
+    --critical: __CRITICAL__;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text); margin: 0; padding: 0 0 4rem;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 1.5rem; }
+  code, .mono, .num { font-family: ui-monospace, "SF Mono", "Cascadia Code", "IBM Plex Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  header.topbar {
+    border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  .topbar-inner { max-width: 980px; margin: 0 auto; padding: 0.9rem 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .wordmark { font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.95rem; color: var(--text); }
+  .wordmark span { color: var(--accent); }
+  nav.links { display: flex; gap: 1.4rem; align-items: center; }
+  nav.links a { color: var(--text-muted); font-size: 0.88rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  nav.links a.active, nav.links a:hover { color: var(--accent); }
+  .status-pill { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--text-muted); }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 6px var(--good); }
+
+  h1 { font-size: 1.6rem; margin: 2rem 0 0.2rem; letter-spacing: -0.01em; }
+  h2 {
+    font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted);
+    margin: 2.6rem 0 0.9rem; padding-bottom: 0.6rem; border-bottom: 1px solid var(--border);
+  }
+  .subtitle { color: var(--text-muted); margin-top: 0.2rem; max-width: 46rem; }
+  .note { color: var(--text-muted); font-size: 0.88rem; }
+
+  .race-hero {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.1rem 1.3rem; margin-bottom: 1.2rem; display: flex; align-items: baseline;
+    justify-content: space-between; flex-wrap: wrap; gap: 0.6rem;
+  }
+  .race-hero .event { font-size: 1.15rem; font-weight: 700; }
+  .archetype-tag {
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent);
+    border: 1px solid rgba(227,166,63,0.4); border-radius: 999px; padding: 0.2rem 0.6rem;
+  }
+
+  table { border-collapse: collapse; width: 100%; }
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  th, td { text-align: left; padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--text-muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; background: var(--surface-raised); }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; }
+  .pos-cell { font-weight: 700; }
+  .team-chip { display: inline-flex; align-items: center; gap: 0.5rem; }
+  .team-swatch { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+
+  .stat-rail { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.6rem; }
+  .stat-tile {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.9rem 1.2rem; min-width: 150px; flex: 1 1 150px;
+  }
+  .stat-tile .value { font-size: 1.65rem; font-weight: 700; }
+  .stat-tile .label { color: var(--text-muted); font-size: 0.78rem; margin-top: 0.15rem; }
+
+  .picker-row { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  select {
+    background: var(--surface-raised); color: var(--text); border: 1px solid var(--border);
+    padding: 0.5rem 0.7rem; border-radius: 7px; font-size: 0.9rem; min-width: 260px;
+  }
+  .picker-arrows { display: flex; gap: 0.4rem; }
+  .picker-arrows button {
+    background: var(--surface-raised); color: var(--text); border: 1px solid var(--border);
+    border-radius: 7px; padding: 0.45rem 0.7rem; cursor: pointer; font-size: 0.85rem;
+  }
+  .picker-arrows button:hover { border-color: var(--accent); color: var(--accent); }
+  .picker-arrows button:disabled { opacity: 0.35; cursor: default; }
+
+  .delta { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.82rem; font-weight: 600; }
+  .delta.good { color: var(--good); }
+  .delta.critical { color: var(--critical); }
+  .delta.neutral { color: var(--text-muted); }
+
+  footer { margin-top: 3.5rem; color: var(--text-muted); font-size: 0.85rem; border-top: 1px solid var(--border); padding-top: 1.2rem; }
+
+  .methodology p, .methodology li { color: var(--text); line-height: 1.6; max-width: 42rem; }
+  .methodology ul { padding-left: 1.2rem; }
+  .methodology strong { color: var(--accent); }
+  .shap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin: 1rem 0 2rem; }
+  .shap-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.2rem; }
+  .shap-card h3 { margin: 0 0 0.6rem; font-size: 0.85rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.04em; }
+  .shap-card ol { margin: 0; padding-left: 1.1rem; color: var(--text-muted); font-size: 0.85rem; }
+  .shap-card li { margin-bottom: 0.3rem; }
+  .shap-card .mono { color: var(--text); }
 </style>
 """
+PAGE_STYLE = PAGE_STYLE_TEMPLATE.replace("__GOOD__", STATUS_GOOD).replace("__CRITICAL__", STATUS_CRITICAL)
 
-NAV_HTML = """
-<nav>
-  <a href="index.html">Predictions</a>
-  <a href="methodology.html">How this works</a>
-  <a href="https://github.com/robcalimente/f1-predictor">GitHub</a>
-</nav>
+
+def topbar_html(active: str, generated_at: str) -> str:
+    def link(href, label, key):
+        cls = "active" if key == active else ""
+        return f'<a href="{href}" class="{cls}">{label}</a>'
+
+    return f"""
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="wordmark">F1 <span>Predictor</span></div>
+    <nav class="links">
+      {link("index.html", "Predictions", "predictions")}
+      {link("methodology.html", "How this works", "methodology")}
+      {link("https://github.com/robcalimente/f1-predictor", "GitHub", "github")}
+    </nav>
+    <span class="status-pill"><span class="status-dot"></span>Updated {generated_at}</span>
+  </div>
+</header>
 """
+
+
+def team_swatch(team: str) -> str:
+    color = TEAM_COLORS.get(team, DEFAULT_TEAM_COLOR)
+    return f'<span class="team-swatch" style="background:{color}"></span>'
 
 
 def load_data():
     next_race = pd.read_parquet(PROCESSED_DIR / "next_race_predictions.parquet")
     wf = pd.read_parquet(PROCESSED_DIR / "walk_forward_predictions.parquet")
+    features = pd.read_parquet(PROCESSED_DIR / "features.parquet")
     with open(PROCESSED_DIR / "eval_metrics.json") as f:
         metrics = json.load(f)
-    return next_race, wf, metrics
+    return next_race, wf, features, metrics
 
 
 def next_race_table_html(next_race: pd.DataFrame) -> str:
     ordered = next_race.sort_values("predicted_finish_position_rank")
     rows = "".join(
-        f"<tr><td>{int(r.predicted_finish_position_rank)}</td>"
-        f"<td>{r.driver_full_name}</td><td>{r.team}</td>"
-        f"<td>{int(r.predicted_quali_rank)}</td>"
-        f"<td>{r.predicted_points:.1f}</td>"
-        f"<td>{r.predicted_team_points:.1f}</td></tr>"
+        f"<tr><td class='pos-cell num'>{int(r.predicted_finish_position_rank)}</td>"
+        f"<td>{r.driver_full_name}</td>"
+        f"<td><span class='team-chip'>{team_swatch(r.team)}{r.team}</span></td>"
+        f"<td class='num mono'>{int(r.predicted_quali_rank)}</td>"
+        f"<td class='num mono'>{r.predicted_points:.1f}</td>"
+        f"<td class='num mono'>{r.predicted_team_points:.1f}</td></tr>"
         for r in ordered.itertuples()
     )
     return f"""
+    <div class="table-scroll">
     <table>
-      <tr><th>Pred. finish</th><th>Driver</th><th>Team</th><th>Pred. quali</th>
-          <th>Pred. points</th><th>Pred. team points</th></tr>
+      <tr><th class="num">Pos</th><th>Driver</th><th>Team</th><th class="num">Quali</th>
+          <th class="num">Points</th><th class="num">Team pts</th></tr>
       {rows}
     </table>
+    </div>
     """
 
 
-def history_figure(wf: pd.DataFrame) -> go.Figure:
+def delta_status(target: str, actual: float, predicted: float) -> tuple[str, str]:
+    """(css class, display string) for a predicted-vs-actual delta.
+    Direction of "better" flips for points (higher good) vs quali/finish
+    (lower good). A small tolerance band is neutral rather than a coin-flip
+    good/critical call on noise-sized differences.
+    """
+    diff = actual - predicted
+    if target == "points":
+        tol, better_is_positive = 0.75, True
+    elif target == "quali_pace":
+        tol, better_is_positive = 0.25, False
+    else:  # finish_position
+        tol, better_is_positive = 0.6, False
+
+    sign = "+" if diff > 0 else ""
+    display = f"{sign}{diff:.1f}"
+
+    if abs(diff) <= tol:
+        return "neutral", display
+    beat = (diff > 0) if better_is_positive else (diff < 0)
+    return ("good" if beat else "critical"), display
+
+
+def build_race_history(wf: pd.DataFrame, features: pd.DataFrame) -> list[dict]:
+    event_lookup = features[["season", "round", "event_name"]].drop_duplicates()
+    name_lookup = features[["driver", "driver_full_name"]].drop_duplicates("driver").set_index("driver")[
+        "driver_full_name"
+    ]
+
+    wide = wf.pivot_table(
+        index=["season", "round", "driver", "team", "archetype"],
+        columns="target",
+        values=["actual", "prediction"],
+        aggfunc="first",
+    )
+    wide.columns = [f"{metric}_{target}" for metric, target in wide.columns]
+    wide = wide.reset_index()
+
+    races = []
+    for (season, rnd), race_df in wide.groupby(["season", "round"]):
+        event_row = event_lookup[(event_lookup["season"] == season) & (event_lookup["round"] == rnd)]
+        event_name = event_row["event_name"].iloc[0] if not event_row.empty else f"Round {rnd}"
+        archetype = race_df["archetype"].iloc[0]
+
+        drivers = []
+        for r in race_df.sort_values("prediction_finish_position").itertuples():
+            entry = {
+                "driver": r.driver,
+                "name": name_lookup.get(r.driver, r.driver),
+                "team": r.team,
+                "team_color": TEAM_COLORS.get(r.team, DEFAULT_TEAM_COLOR),
+            }
+            for target, key in [
+                ("quali_pace", "quali"),
+                ("finish_position", "finish"),
+                ("points", "points"),
+            ]:
+                actual = getattr(r, f"actual_{target}", None)
+                pred = getattr(r, f"prediction_{target}", None)
+                if actual is None or pred is None or pd.isna(actual) or pd.isna(pred):
+                    entry[key] = None
+                    continue
+                cls, disp = delta_status(target, actual, pred)
+                entry[key] = {
+                    "actual": round(float(actual), 2),
+                    "pred": round(float(pred), 2),
+                    "delta_cls": cls,
+                    "delta_disp": disp,
+                }
+            drivers.append(entry)
+
+        races.append(
+            {
+                "key": f"{season}-{rnd}",
+                "season": int(season),
+                "round": int(rnd),
+                "event_name": event_name,
+                "archetype": ARCHETYPE_LABELS.get(archetype, archetype),
+                "drivers": drivers,
+            }
+        )
+
+    races.sort(key=lambda r: (r["season"], r["round"]), reverse=True)
+    return races
+
+
+def history_browser_html(races: list[dict]) -> str:
+    options = "".join(
+        f'<option value="{r["key"]}">{r["season"]} R{r["round"]} — {r["event_name"]}</option>'
+        for r in races
+    )
+    races_json = json.dumps(races)
+    return f"""
+<div class="picker-row">
+  <select id="race-picker">{options}</select>
+  <div class="picker-arrows">
+    <button id="race-prev" title="Older race">&larr; Older</button>
+    <button id="race-next" title="Newer race">Newer &rarr;</button>
+  </div>
+</div>
+<div id="race-detail"></div>
+
+<script id="race-data" type="application/json">{races_json}</script>
+<script>
+(function() {{
+  const races = JSON.parse(document.getElementById('race-data').textContent);
+  const picker = document.getElementById('race-picker');
+  const detail = document.getElementById('race-detail');
+  const prevBtn = document.getElementById('race-prev');
+  const nextBtn = document.getElementById('race-next');
+
+  function metricCell(entry, key, unit) {{
+    const m = entry[key];
+    if (!m) return '<td class="num mono">—</td><td class="num mono">—</td><td class="num">—</td>';
+    return `<td class="num mono">${{m.pred}}${{unit}}</td>` +
+           `<td class="num mono">${{m.actual}}${{unit}}</td>` +
+           `<td class="num"><span class="delta ${{m.delta_cls}}">${{m.delta_disp}}${{unit}}</span></td>`;
+  }}
+
+  function render(key) {{
+    const race = races.find(r => r.key === key);
+    if (!race) return;
+    const idx = races.findIndex(r => r.key === key);
+    prevBtn.disabled = idx >= races.length - 1;
+    nextBtn.disabled = idx <= 0;
+
+    const rows = race.drivers.map(d => `
+      <tr>
+        <td><span class="team-chip"><span class="team-swatch" style="background:${{d.team_color}}"></span>${{d.name}}</span></td>
+        <td>${{d.team}}</td>
+        ${{metricCell(d, 'quali', '%')}}
+        ${{metricCell(d, 'finish', '')}}
+        ${{metricCell(d, 'points', '')}}
+      </tr>`).join('');
+
+    detail.innerHTML = `
+      <div class="race-hero">
+        <span class="event">${{race.season}} Round ${{race.round}} — ${{race.event_name}}</span>
+        <span class="archetype-tag">${{race.archetype}}</span>
+      </div>
+      <div class="table-scroll">
+      <table>
+        <tr>
+          <th>Driver</th><th>Team</th>
+          <th class="num">Quali pred</th><th class="num">Quali actual</th><th class="num">Δ</th>
+          <th class="num">Finish pred</th><th class="num">Finish actual</th><th class="num">Δ</th>
+          <th class="num">Points pred</th><th class="num">Points actual</th><th class="num">Δ</th>
+        </tr>
+        ${{rows}}
+      </table>
+      </div>`;
+  }}
+
+  picker.addEventListener('change', () => render(picker.value));
+  prevBtn.addEventListener('click', () => {{
+    const idx = races.findIndex(r => r.key === picker.value);
+    if (idx < races.length - 1) {{ picker.value = races[idx + 1].key; render(picker.value); }}
+  }});
+  nextBtn.addEventListener('click', () => {{
+    const idx = races.findIndex(r => r.key === picker.value);
+    if (idx > 0) {{ picker.value = races[idx - 1].key; render(picker.value); }}
+  }});
+
+  if (races.length) render(races[0].key);
+}})();
+</script>
+"""
+
+
+def scatter_figure(wf: pd.DataFrame) -> go.Figure:
     fig = make_subplots(
         rows=1, cols=3,
         subplot_titles=("Qualifying pace (% gap to pole)", "Finishing position", "Points"),
     )
-    target_to_col = {"quali_pace": 1, "finish_position": 2, "points": 3}
-    for target, col in target_to_col.items():
+    target_to_col = {"quali_pace": (1, CHART_BLUE), "finish_position": (2, CHART_ORANGE), "points": (3, CHART_AQUA)}
+    for target, (col, color) in target_to_col.items():
         sub = wf[wf["target"] == target]
         fig.add_trace(
             go.Scatter(
                 x=sub["actual"], y=sub["prediction"], mode="markers",
-                marker=dict(size=5, opacity=0.5, color="#e10600"),
+                marker=dict(size=5, opacity=0.55, color=color),
                 name=target, showlegend=False,
                 text=sub["driver"] + " (" + sub["season"].astype(str) + " R" + sub["round"].astype(str) + ")",
                 hoverinfo="text+x+y",
@@ -105,13 +421,17 @@ def history_figure(wf: pd.DataFrame) -> go.Figure:
         lo, hi = sub["actual"].min(), sub["actual"].max()
         fig.add_trace(
             go.Scatter(x=[lo, hi], y=[lo, hi], mode="lines",
-                       line=dict(color="#6b7280", dash="dash"), showlegend=False),
+                       line=dict(color="#3a4050", dash="dash", width=1), showlegend=False),
             row=1, col=col,
         )
     fig.update_layout(
-        template="plotly_dark", height=420, margin=dict(t=60, b=40, l=40, r=20),
-        paper_bgcolor="#0e1116", plot_bgcolor="#171b22",
+        template="plotly_dark", height=380, margin=dict(t=50, b=30, l=40, r=20),
+        paper_bgcolor="#0a0c10", plot_bgcolor="#14171d",
+        font=dict(family="-apple-system, Segoe UI, Roboto, sans-serif", color="#8d94a3", size=11),
     )
+    fig.update_annotations(font=dict(size=12, color="#edeff3"))
+    fig.update_xaxes(gridcolor="#262b35", zerolinecolor="#262b35")
+    fig.update_yaxes(gridcolor="#262b35", zerolinecolor="#262b35")
     return fig
 
 
@@ -128,64 +448,82 @@ def headline_cards_html(metrics: dict) -> str:
         if val is None:
             continue
         cards.append(
-            f'<div class="headline-card"><div class="value">{val:.2f}</div>'
+            f'<div class="stat-tile"><div class="value mono">{val:.2f}</div>'
             f'<div class="label">{label} ({unit})</div></div>'
         )
     podium = metrics.get("finish_position", {}).get("podium_accuracy")
     if podium is not None:
         cards.append(
-            f'<div class="headline-card"><div class="value">{podium:.0%}</div>'
+            f'<div class="stat-tile"><div class="value mono">{podium:.0%}</div>'
             f'<div class="label">Exact podium match rate</div></div>'
         )
-    return f'<div class="headline-row">{"".join(cards)}</div>'
+    return f'<div class="stat-rail">{"".join(cards)}</div>'
 
 
-def build_index_html(next_race: pd.DataFrame, wf: pd.DataFrame, metrics: dict) -> str:
+def build_index_html(next_race: pd.DataFrame, wf: pd.DataFrame, features: pd.DataFrame, metrics: dict, generated_at: str) -> str:
     event_name = next_race["event_name"].iloc[0]
     archetype = ARCHETYPE_LABELS.get(next_race["archetype"].iloc[0], next_race["archetype"].iloc[0])
-    history_fig_html = history_figure(wf).to_html(
+    scatter_html = scatter_figure(wf).to_html(
         full_html=False, include_plotlyjs="cdn", config={"displayModeBar": False}
     )
+    races = build_race_history(wf, features)
 
     return f"""<!doctype html>
 <html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>F1 Predictor</title>
 {PAGE_STYLE}
 </head><body>
-{NAV_HTML}
-<h1>F1 Predictor</h1>
-<p class="subtitle">Predicting driver and team performance by track archetype, from 2018-2026 F1 data.</p>
+{topbar_html("predictions", generated_at)}
+<div class="wrap">
 
-<h2>Next race: {event_name}</h2>
-<p class="note">Track archetype: {archetype}. Predictions assume a clean race for every driver (no DNFs modeled).</p>
+<h1>Predicting driver &amp; team performance by track archetype</h1>
+<p class="subtitle">Three LightGBM models, trained on 2018-2026 F1 data, predict qualifying pace, finishing
+position, and points -- separating a driver's slow-moving track skill from a team's fast-moving car form.</p>
+
+<h2>Next race</h2>
+<div class="race-hero">
+  <span class="event">{event_name}</span>
+  <span class="archetype-tag">{archetype}</span>
+</div>
+<p class="note">Predictions assume a clean race for every driver (no DNFs modeled).</p>
 {next_race_table_html(next_race)}
 
 <h2>Model track record</h2>
-<p class="note">Out-of-sample accuracy, walk-forward validated: every prediction below was made without the model
-ever seeing that race's actual result during training.</p>
+<p class="note">Out-of-sample accuracy, walk-forward validated: every prediction below was made without the
+model ever seeing that race's actual result during training.</p>
 {headline_cards_html(metrics)}
-{history_fig_html}
+{scatter_html}
+
+<h2>Race-by-race history</h2>
+<p class="note">Every race the model has scored, most recent first. Δ is actual minus predicted; green means
+the result beat the prediction, red means it missed.</p>
+{history_browser_html(races)}
 
 <footer>Built from FastF1 data. See <a href="methodology.html">how this works</a> for the full methodology.</footer>
+</div>
 </body></html>"""
 
 
-def build_methodology_html(metrics: dict, shap_importance: dict | None) -> str:
+def build_methodology_html(metrics: dict, shap_importance: dict | None, generated_at: str) -> str:
     shap_html = ""
     if shap_importance:
-        sections = []
+        cards = []
         for target, importances in shap_importance.items():
             top = list(importances.items())[:5]
-            items = "".join(f"<li>{k}: {v:.2f}</li>" for k, v in top)
-            sections.append(f"<h3>{target}</h3><ul>{items}</ul>")
-        shap_html = "<h2>What drives each prediction</h2>" + "".join(sections)
+            items = "".join(f"<li><span class='mono'>{k}</span>: {v:.2f}</li>" for k, v in top)
+            cards.append(f'<div class="shap-card"><h3>{target}</h3><ol>{items}</ol></div>')
+        shap_html = f'<h2>What drives each prediction</h2><div class="shap-grid">{"".join(cards)}</div>'
 
     return f"""<!doctype html>
 <html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>F1 Predictor — How this works</title>
 {PAGE_STYLE}
 </head><body>
-{NAV_HTML}
+{topbar_html("methodology", generated_at)}
+<div class="wrap methodology">
+
 <h1>How this works</h1>
 
 <h2>What it predicts</h2>
@@ -236,12 +574,13 @@ not a random train/test split, which would leak future information into training
 </ul>
 
 <footer><a href="index.html">Back to predictions</a></footer>
+</div>
 </body></html>"""
 
 
 def main():
     DOCS_DIR.mkdir(exist_ok=True)
-    next_race, wf, metrics = load_data()
+    next_race, wf, features, metrics = load_data()
 
     shap_importance = None
     shap_path = PROCESSED_DIR / "shap_importance.json"
@@ -249,8 +588,10 @@ def main():
         with open(shap_path) as f:
             shap_importance = json.load(f)
 
-    (DOCS_DIR / "index.html").write_text(build_index_html(next_race, wf, metrics))
-    (DOCS_DIR / "methodology.html").write_text(build_methodology_html(metrics, shap_importance))
+    generated_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    (DOCS_DIR / "index.html").write_text(build_index_html(next_race, wf, features, metrics, generated_at))
+    (DOCS_DIR / "methodology.html").write_text(build_methodology_html(metrics, shap_importance, generated_at))
     print(f"Wrote {DOCS_DIR / 'index.html'} and {DOCS_DIR / 'methodology.html'}")
 
 

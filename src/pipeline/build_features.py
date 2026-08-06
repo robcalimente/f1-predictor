@@ -29,16 +29,17 @@ ARCHETYPE_CSV = REPO_ROOT / "data" / "circuit_archetypes.csv"
 ROOKIE_SHRINKAGE_K = 3  # pseudo-count weight given to the debut prior
 TEAM_FORM_WINDOW = 5
 
-# Status strings FastF1 reports for a car that finished / was classified
-# despite being lapped. Anything else (Retired, Accident, DNS, DSQ, etc.)
-# is treated as a DNF and excluded from position/points training targets.
-CLASSIFIED_PREFIXES = ("Finished",)
+# Status strings FastF1 reports for a car that finished / was classified,
+# including being lapped ("+1 Lap", "+2 Laps", ... or the literal "Lapped").
+# Anything else (Retired, Accident, DNS, DSQ, mechanical failures, etc.) is
+# treated as a DNF and excluded from position/points training targets.
+CLASSIFIED_EXACT = ("Finished", "Lapped")
 
 
 def is_classified(status: str) -> bool:
     if not isinstance(status, str):
         return False
-    return status.startswith(CLASSIFIED_PREFIXES) or status.startswith("+")
+    return status in CLASSIFIED_EXACT or status.startswith("+")
 
 
 def era_for_season(season: int) -> str:
