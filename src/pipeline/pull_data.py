@@ -1,8 +1,13 @@
 """Pull race + qualifying results for all seasons in SEASON_RANGE via FastF1.
 
 Writes one row per driver per race to data/raw/results_<year>.parquet.
-Safe to re-run: skips a season file that already exists unless FORCE=1 env var is set.
+Safe to re-run: skips a PAST season's file if it already exists (those are
+final and won't change). The current calendar year is always re-pulled in
+full, since new races keep completing throughout its season -- otherwise a
+weekly automation run would never pick up that week's new result once the
+file exists once. Set FORCE=1 to re-pull every season regardless.
 """
+import datetime
 import os
 import time
 from pathlib import Path
@@ -14,6 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CACHE_DIR = REPO_ROOT / ".fastf1_cache"
 RAW_DIR = REPO_ROOT / "data" / "raw"
 SEASON_RANGE = range(2018, 2027)  # 2018-2026 inclusive
+CURRENT_SEASON = datetime.date.today().year
 FORCE = os.environ.get("FORCE") == "1"
 
 CACHE_DIR.mkdir(exist_ok=True)
@@ -81,7 +87,8 @@ def pull_season(year: int) -> pd.DataFrame:
 def main():
     for year in SEASON_RANGE:
         out_path = RAW_DIR / f"results_{year}.parquet"
-        if out_path.exists() and not FORCE:
+        is_current_season = year == CURRENT_SEASON
+        if out_path.exists() and not FORCE and not is_current_season:
             print(f"{year}: already pulled, skipping (set FORCE=1 to refresh)")
             continue
 

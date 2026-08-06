@@ -1,0 +1,53 @@
+name: Pre-race predictions
+
+on:
+  schedule:
+    # Thursday 09:00 UTC, ahead of typical race-weekend qualifying/practice
+    - cron: "0 9 * * 4"
+  workflow_dispatch: {}
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore FastF1 cache
+        uses: actions/cache@v4
+        with:
+          path: .fastf1_cache
+          key: fastf1-cache-${{ github.run_id }}
+          restore-keys: fastf1-cache-
+
+      - name: Pull latest data
+        run: python src/pipeline/pull_data.py
+
+      - name: Build features
+        run: python src/pipeline/build_features.py
+
+      - name: Train models
+        run: python src/pipeline/train_model.py
+
+      - name: Generate next-race predictions
+        run: python src/pipeline/generate_predictions.py
+
+      - name: Evaluate
+        run: python src/pipeline/evaluate.py
+
+      - name: Build dashboard
+        run: python src/pipeline/build_dashboard.py
+
+      - name: Commit refreshed output
+        run: |
+          git config user.name "f1-predictor-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/processed docs models
+          git diff --cached --quiet || git commit -m "Pre-race predictions refresh [skip ci]"
+          git push
