@@ -594,8 +594,18 @@ them separately:</p>
       when the driver has little or no history there (handles rookies and archetype debuts).</li>
   <li><strong>Team form</strong>: a rolling average of the team's last five races, plus a trend/slope term
       that captures a team getting faster or slower within a season (in-season upgrades), reset at each
-      regulation-era boundary (2022, 2026).</li>
+      regulation-era boundary (2022, 2026). Race-pace form and qualifying-pace form are tracked separately —
+      a team's single-lap speed and its race-day execution don't always move together.</li>
 </ul>
+
+<h2>Circuit conditions</h2>
+<p>Two more features, both known in advance rather than guessed: how often a given circuit has produced a
+<strong>wet race</strong>, and how often it's produced a <strong>safety car or red flag</strong>, as an
+expanding historical rate per circuit (shrunk toward the calendar-wide average for a circuit with little
+history, like a new addition to the calendar). This is deliberately a circuit's historical tendency, not a
+live weather forecast for the upcoming race — the model doesn't get to know next week's actual conditions
+in advance, so it wouldn't be fair to feed the historical model actual race-day weather when predicting a
+future race without that information.</p>
 
 <h2>Model</h2>
 <p>Three independent LightGBM gradient-boosted regressors, one per target, trained on the features above

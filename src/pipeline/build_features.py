@@ -122,26 +122,41 @@ def driver_archetype_blend(past: list[dict], debut_prior: dict) -> tuple[float, 
     return avg_finish, avg_gap, avg_points, n
 
 
-def team_form_blend(past: list[dict]) -> tuple[float, float, float, int]:
-    """(avg_finish, avg_points, trend_slope, n) for a team's last
-    TEAM_FORM_WINDOW races within one era. Shared the same way as
-    driver_archetype_blend above.
+def _trend_slope(values: np.ndarray) -> float:
+    n = len(values)
+    valid = np.isfinite(values)
+    if valid.sum() < 2:
+        return 0.0
+    x = np.arange(n)[valid]
+    return float(np.polyfit(x, values[valid], 1)[0])
+
+
+def team_form_blend(past: list[dict]) -> dict:
+    """Rolling stats for a team's last TEAM_FORM_WINDOW races within one
+    era: avg finish/points/quali-gap, plus a trend slope for finish and for
+    quali gap separately (a team's single-lap pace and its race-day
+    execution can improve at different rates within a season). Shared by
+    build_features (historical rows) and generate_predictions (next-race
+    snapshot).
     """
     window = past[-TEAM_FORM_WINDOW:]
     n = len(window)
     if n == 0:
-        return np.nan, np.nan, 0.0, 0
+        return {
+            "avg_finish": np.nan, "avg_points": np.nan, "avg_quali_gap": np.nan,
+            "trend_finish": 0.0, "trend_quali": 0.0, "n": 0,
+        }
     finishes = np.array([p["finish_position"] for p in window], dtype=float)
     points_ = np.array([p["points"] for p in window], dtype=float)
-    avg_finish = np.nanmean(finishes)
-    avg_points = np.nanmean(points_)
-    valid = np.isfinite(finishes)
-    if valid.sum() >= 2:
-        x = np.arange(n)[valid]
-        trend = np.polyfit(x, finishes[valid], 1)[0]
-    else:
-        trend = 0.0
-    return avg_finish, avg_points, trend, n
+    quali_gaps = np.array([p.get("quali_gap", np.nan) for p in window], dtype=float)
+    return {
+        "avg_finish": float(np.nanmean(finishes)),
+        "avg_points": float(np.nanmean(points_)),
+        "avg_quali_gap": float(np.nanmean(quali_gaps)) if np.isfinite(quali_gaps).any() else np.nan,
+        "trend_finish": _trend_slope(finishes),
+        "trend_quali": _trend_slope(quali_gaps),
+        "n": n,
+    }
 
 
 def add_driver_archetype_skill(df: pd.DataFrame) -> tuple[pd.DataFrame, dict, dict]:
@@ -211,14 +226,16 @@ def add_team_form(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
             era = team_rows["era"].iloc[0]
             key = (team, era)
             past = history.get(key, [])
-            avg_finish, avg_points, trend, n = team_form_blend(past)
+            stats = team_form_blend(past)
 
             for idx in team_rows.index:
                 feature_by_row_index[idx] = {
-                    "team_form_avg_finish": avg_finish,
-                    "team_form_avg_points": avg_points,
-                    "team_form_trend_slope": trend,
-                    "team_form_race_count": n,
+                    "team_form_avg_finish": stats["avg_finish"],
+                    "team_form_avg_points": stats["avg_points"],
+                    "team_form_avg_quali_gap": stats["avg_quali_gap"],
+                    "team_form_trend_slope": stats["trend_finish"],
+                    "team_form_quali_trend_slope": stats["trend_quali"],
+                    "team_form_race_count": stats["n"],
                 }
 
             # one history entry for the whole race: this team's mean result
@@ -226,6 +243,7 @@ def add_team_form(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
                 {
                     "finish_position": team_rows["finish_position"].mean(),
                     "points": team_rows["points"].mean(),
+                    "quali_gap": team_rows["quali_pct_gap_to_pole"].mean(),
                 }
             )
             history[key] = past
@@ -235,22 +253,79 @@ def add_team_form(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     return df, history
 
 
+CIRCUIT_SHRINKAGE_K = 3  # pseudo-count weight given to the global rain/SC rate
+
+
+def circuit_conditions_blend(past: list[dict], global_prior: dict) -> tuple[float, float, int]:
+    """(wet_probability, safety_car_probability, n) for one circuit, shrunk
+    toward the global rate for a circuit with little or no history yet
+    (new additions to the calendar like Vegas/Miami/Madrid)."""
+    n = len(past)
+    if n == 0:
+        return global_prior["rain_prob"], global_prior["sc_prob"], 0
+    rain_mean = np.mean([p["rained"] for p in past])
+    sc_mean = np.mean([p["safety_car"] for p in past])
+    w = n / (n + CIRCUIT_SHRINKAGE_K)
+    wet_prob = w * rain_mean + (1 - w) * global_prior["rain_prob"]
+    sc_prob = w * sc_mean + (1 - w) * global_prior["sc_prob"]
+    return wet_prob, sc_prob, n
+
+
+def add_circuit_conditions(df: pd.DataFrame) -> tuple[pd.DataFrame, dict, dict]:
+    """Circuit-level historical priors for how often a race there is wet or
+    safety-car-affected -- known in advance (it's about the circuit, not
+    next week's forecast), unlike actual race-day weather. Expanding,
+    chronological, one history entry per race (not per driver row)."""
+    df = df.sort_values(["race_order", "circuit_key"]).reset_index(drop=True)
+
+    race_level = df.drop_duplicates("race_order")
+    global_prior = {
+        "rain_prob": float(race_level["rained"].mean()),
+        "sc_prob": float(race_level["safety_car"].mean()),
+    }
+
+    history: dict[str, list[dict]] = {}
+    feature_by_row_index: dict[int, dict] = {}
+
+    for race_order in sorted(df["race_order"].unique()):
+        race_df = df[df["race_order"] == race_order]
+        circuit_key = race_df["circuit_key"].iloc[0]
+        past = history.get(circuit_key, [])
+        wet_prob, sc_prob, n = circuit_conditions_blend(past, global_prior)
+
+        for idx in race_df.index:
+            feature_by_row_index[idx] = {
+                "circuit_wet_probability": wet_prob,
+                "circuit_safety_car_probability": sc_prob,
+            }
+
+        past.append({"rained": bool(race_df["rained"].iloc[0]), "safety_car": bool(race_df["safety_car"].iloc[0])})
+        history[circuit_key] = past
+
+    feat_df = pd.DataFrame.from_dict(feature_by_row_index, orient="index")
+    df = df.join(feat_df)
+    return df, history, global_prior
+
+
 def main():
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     raw = load_raw()
     race_level = build_race_level(raw)
     with_driver_skill, driver_history, debut_prior = add_driver_archetype_skill(race_level)
     with_team_form, team_history = add_team_form(with_driver_skill)
+    with_conditions, circuit_history, circuit_global_prior = add_circuit_conditions(with_team_form)
 
     feature_state = {
         "driver_history": driver_history,
         "debut_prior": debut_prior,
         "team_history": team_history,
+        "circuit_history": circuit_history,
+        "circuit_global_prior": circuit_global_prior,
     }
     with open(PROCESSED_DIR / "feature_state.pkl", "wb") as f:
         pickle.dump(feature_state, f)
 
-    out = with_team_form.sort_values(["race_order", "team", "driver"]).reset_index(drop=True)
+    out = with_conditions.sort_values(["race_order", "team", "driver"]).reset_index(drop=True)
     out_path = PROCESSED_DIR / "features.parquet"
     out.to_parquet(out_path, index=False)
     print(f"Wrote {len(out)} rows to {out_path}")

@@ -33,8 +33,12 @@ FEATURE_COLS = [
     "driver_archetype_race_count",
     "team_form_avg_finish",
     "team_form_avg_points",
+    "team_form_avg_quali_gap",
     "team_form_trend_slope",
+    "team_form_quali_trend_slope",
     "team_form_race_count",
+    "circuit_wet_probability",
+    "circuit_safety_car_probability",
 ]
 CATEGORICAL_COLS = ["archetype"]
 

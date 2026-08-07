@@ -115,7 +115,7 @@
       <a href="methodology.html" class="active">How this works</a>
       <a href="https://github.com/robcalimente/f1-predictor" class="">GitHub</a>
     </nav>
-    <span class="status-pill"><span class="status-dot"></span>Updated 2026-08-06 22:51 UTC</span>
+    <span class="status-pill"><span class="status-dot"></span>Updated 2026-08-07 14:04 UTC</span>
   </div>
 </header>
 
@@ -141,8 +141,18 @@ them separately:</p>
       when the driver has little or no history there (handles rookies and archetype debuts).</li>
   <li><strong>Team form</strong>: a rolling average of the team's last five races, plus a trend/slope term
       that captures a team getting faster or slower within a season (in-season upgrades), reset at each
-      regulation-era boundary (2022, 2026).</li>
+      regulation-era boundary (2022, 2026). Race-pace form and qualifying-pace form are tracked separately —
+      a team's single-lap speed and its race-day execution don't always move together.</li>
 </ul>
+
+<h2>Circuit conditions</h2>
+<p>Two more features, both known in advance rather than guessed: how often a given circuit has produced a
+<strong>wet race</strong>, and how often it's produced a <strong>safety car or red flag</strong>, as an
+expanding historical rate per circuit (shrunk toward the calendar-wide average for a circuit with little
+history, like a new addition to the calendar). This is deliberately a circuit's historical tendency, not a
+live weather forecast for the upcoming race — the model doesn't get to know next week's actual conditions
+in advance, so it wouldn't be fair to feed the historical model actual race-day weather when predicting a
+future race without that information.</p>
 
 <h2>Model</h2>
 <p>Three independent LightGBM gradient-boosted regressors, one per target, trained on the features above
@@ -158,34 +168,34 @@ not a random train/test split, which would leak future information into training
     <div class="table-scroll">
     <table>
       <tr><th>Target</th><th class="num">MAE</th><th class="num">R²</th><th class="num">Spearman ρ</th></tr>
-      <tr><td>Qualifying pace (% gap to pole)</td><td class='num mono'>1.309</td><td class='num mono'>-0.020</td><td class='num mono'>0.534</td></tr>
-      <tr><td>Finishing position</td><td class='num mono'>2.956</td><td class='num mono'>0.463</td><td class='num mono'>0.672</td></tr>
-      <tr><td>Points</td><td class='num mono'>3.806</td><td class='num mono'>0.482</td><td class='num mono'>0.671</td></tr>
+      <tr><td>Qualifying pace (% gap to pole)</td><td class='num mono'>1.334</td><td class='num mono'>-0.013</td><td class='num mono'>0.545</td></tr>
+      <tr><td>Finishing position</td><td class='num mono'>2.965</td><td class='num mono'>0.460</td><td class='num mono'>0.675</td></tr>
+      <tr><td>Points</td><td class='num mono'>3.878</td><td class='num mono'>0.475</td><td class='num mono'>0.671</td></tr>
     </table>
     </div>
 
     <div class="table-scroll" style="margin-top:1rem">
     <table>
       <tr><th>Set-based accuracy</th><th class="num">Rate</th></tr>
-      <tr><td>Winner called correctly</td><td class='num mono'>34.8%</td></tr>
-      <tr><td>Exact podium (top 3) match</td><td class='num mono'>10.6%</td></tr>
-      <tr><td>Exact points-scorers (top 10) match</td><td class='num mono'>5.7%</td></tr>
-      <tr><td>Avg. overlap with actual points scorers</td><td class='num mono'>79.9%</td></tr>
-      <tr><td>Pole position called correctly</td><td class='num mono'>16.3%</td></tr>
+      <tr><td>Winner called correctly</td><td class='num mono'>31.0%</td></tr>
+      <tr><td>Exact podium (top 3) match</td><td class='num mono'>11.3%</td></tr>
+      <tr><td>Exact points-scorers (top 10) match</td><td class='num mono'>5.6%</td></tr>
+      <tr><td>Avg. overlap with actual points scorers</td><td class='num mono'>80.7%</td></tr>
+      <tr><td>Pole position called correctly</td><td class='num mono'>22.7%</td></tr>
     </table>
     </div>
 
     <p class="note" style="margin-top:1rem">
     <strong>On the baseline comparison:</strong> a naive "everyone finishes where they qualified, nobody
-    overtakes" baseline scores 2.935 MAE on this same set of races — almost
-    identical to the model's 2.956. That's not a hidden weakness so much as a fact about
+    overtakes" baseline scores 2.936 MAE on this same set of races — almost
+    identical to the model's 2.965. That's not a hidden weakness so much as a fact about
     modern F1: on most tracks, grid position already explains most of the finishing order, because overtaking
-    is hard. Spearman rank correlation (0.672) and the points R²
-    (0.482) are the more informative numbers here — they show the model captures who
+    is hard. Spearman rank correlation (0.675) and the points R²
+    (0.475) are the more informative numbers here — they show the model captures who
     outperforms their grid slot, not just who started where.</p>
     
 
-<h2>What drives each prediction</h2><div class="shap-grid"><div class="shap-card"><h3>quali_pace</h3><ol><li><span class='mono'>team_form_avg_points</span>: 0.58</li><li><span class='mono'>team_form_avg_finish</span>: 0.19</li><li><span class='mono'>archetype</span>: 0.18</li><li><span class='mono'>driver_archetype_race_count</span>: 0.16</li><li><span class='mono'>driver_archetype_avg_points</span>: 0.15</li></ol></div><div class="shap-card"><h3>finish_position</h3><ol><li><span class='mono'>team_form_avg_points</span>: 2.84</li><li><span class='mono'>driver_archetype_avg_points</span>: 0.44</li><li><span class='mono'>team_form_avg_finish</span>: 0.43</li><li><span class='mono'>driver_archetype_avg_finish</span>: 0.32</li><li><span class='mono'>team_form_trend_slope</span>: 0.28</li></ol></div><div class="shap-card"><h3>points</h3><ol><li><span class='mono'>team_form_avg_points</span>: 4.32</li><li><span class='mono'>driver_archetype_avg_points</span>: 0.87</li><li><span class='mono'>driver_archetype_avg_quali_gap</span>: 0.41</li><li><span class='mono'>team_form_trend_slope</span>: 0.35</li><li><span class='mono'>team_form_avg_finish</span>: 0.34</li></ol></div></div>
+<h2>What drives each prediction</h2><div class="shap-grid"><div class="shap-card"><h3>quali_pace</h3><ol><li><span class='mono'>team_form_avg_points</span>: 0.42</li><li><span class='mono'>team_form_avg_quali_gap</span>: 0.33</li><li><span class='mono'>circuit_wet_probability</span>: 0.20</li><li><span class='mono'>driver_archetype_avg_points</span>: 0.17</li><li><span class='mono'>circuit_safety_car_probability</span>: 0.15</li></ol></div><div class="shap-card"><h3>finish_position</h3><ol><li><span class='mono'>team_form_avg_points</span>: 2.70</li><li><span class='mono'>driver_archetype_avg_points</span>: 0.41</li><li><span class='mono'>team_form_avg_finish</span>: 0.39</li><li><span class='mono'>team_form_avg_quali_gap</span>: 0.37</li><li><span class='mono'>driver_archetype_avg_quali_gap</span>: 0.27</li></ol></div><div class="shap-card"><h3>points</h3><ol><li><span class='mono'>team_form_avg_points</span>: 3.94</li><li><span class='mono'>driver_archetype_avg_points</span>: 0.79</li><li><span class='mono'>team_form_avg_quali_gap</span>: 0.61</li><li><span class='mono'>driver_archetype_avg_quali_gap</span>: 0.40</li><li><span class='mono'>team_form_avg_finish</span>: 0.27</li></ol></div></div>
 
 <h2>Known limitations</h2>
 <ul>

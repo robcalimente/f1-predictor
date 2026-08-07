@@ -21,6 +21,10 @@ that separates two signals that move at very different speeds:
 - **Team/car form** — a fast-moving signal computed from each team's last 3-5 races plus an in-season
   trend term, reset at known regulation-change boundaries (2022, 2026). This is what captures a team
   going from back-of-the-grid to front-running (or vice versa) within a season as they bring upgrades.
+  Race-pace form and qualifying-pace form are tracked separately.
+
+It also uses each circuit's historical **wet-race** and **safety-car** rates — a circuit-level tendency
+known in advance, not a live weather forecast the model can't actually have for a future race.
 
 Every number below is out-of-sample: three independent LightGBM models, chronologically walk-forward
 validated, so a prediction is never made with data from the future relative to the race it's scoring.
@@ -29,16 +33,17 @@ Full methodology, including the accuracy breakdown, model choice, and known limi
 
 ## Results
 
-Across 2,424 walk-forward-validated driver-race predictions (2020-2026):
+Across 2,439 walk-forward-validated driver-race predictions (2020-2026):
 
 | Metric | Result |
 |---|---|
-| Race winner called correctly | 34.8% |
-| Exact podium (top 3) match | 10.6% |
-| Avg. overlap with actual points scorers (top 10) | 79.9% |
-| Qualifying pace MAE | 1.31 (% gap to pole) |
-| Finishing position MAE | 2.96 positions |
-| Points MAE / R² | 3.81 / 0.48 |
+| Pole position called correctly | 22.7% |
+| Race winner called correctly | 31.0% |
+| Exact podium (top 3) match | 11.3% |
+| Avg. overlap with actual points scorers (top 10) | 80.7% |
+| Qualifying pace MAE | 1.33 (% gap to pole) |
+| Finishing position MAE | 2.97 positions |
+| Points MAE / R² | 3.88 / 0.47 |
 | Finish-position Spearman rank correlation | 0.67 |
 
 The dashboard's ["How this works"](https://robcalimente.github.io/f1-predictor/methodology.html) page also

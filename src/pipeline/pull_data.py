@@ -26,6 +26,48 @@ CACHE_DIR.mkdir(exist_ok=True)
 RAW_DIR.mkdir(parents=True, exist_ok=True)
 fastf1.Cache.enable_cache(str(CACHE_DIR))
 
+# Track-status codes from FastF1's race control feed. Safety car / VSC
+# periods are what makes a race's finishing order diverge from grid order --
+# a circuit-level history of how often that happens is a genuine predictive
+# signal, not just trivia.
+SAFETY_CAR_STATUS_CODES = {"4", "5", "6"}  # Safety Car, Red Flag, VSC deployed
+
+# A single stray "Rainfall: True" sample out of a whole session is sensor
+# noise, not a wet race (verified: 2018 French GP shows 1/102 samples True
+# despite being a dry race). Requiring rain across a meaningful fraction of
+# the session filters that out while still catching real wet races (2023
+# Dutch GP: 0.23, 2021 Belgian GP washout: 0.84).
+RAIN_FRACTION_THRESHOLD = 0.05
+
+# Weather/safety-car data needs a much heavier per-session API load (laps +
+# messages, not just results) than the rest of the pull, and FastF1's public
+# API caps at 500 calls/hour. Backfilling all 9 seasons in one pass reliably
+# blows through that. Circuit-level rain/SC tendency doesn't need a full
+# decade of history to be a meaningful prior, so it's scoped to recent
+# seasons only -- 2018-2020 rows simply have these fields as null and fall
+# back to the calendar-wide average in feature engineering.
+WEATHER_MIN_SEASON = 2021
+
+
+def race_conditions(session) -> dict:
+    """Weather + safety-car summary for one race session. Requires the
+    session to have been loaded with laps=True (track_status needs it) and
+    weather=True."""
+    rained = False
+    avg_track_temp = None
+    if session.weather_data is not None and not session.weather_data.empty:
+        rained = bool(session.weather_data["Rainfall"].mean() > RAIN_FRACTION_THRESHOLD)
+        avg_track_temp = float(session.weather_data["TrackTemp"].mean())
+
+    safety_car = False
+    try:
+        if session.track_status is not None and not session.track_status.empty:
+            safety_car = bool(session.track_status["Status"].isin(SAFETY_CAR_STATUS_CODES).any())
+    except Exception:
+        pass  # track_status not available for some older/incomplete sessions
+
+    return {"rained": rained, "avg_track_temp": avg_track_temp, "safety_car": safety_car}
+
 
 def pull_season(year: int) -> pd.DataFrame:
     schedule = fastf1.get_event_schedule(year, include_testing=False)
@@ -35,10 +77,18 @@ def pull_season(year: int) -> pd.DataFrame:
         event_name = event["EventName"]
         is_sprint = "Sprint" in str(event.get("EventFormat", ""))
 
+        pull_weather = year >= WEATHER_MIN_SEASON
+
         for session_code, session_label in [("Q", "quali"), ("R", "race")]:
             try:
                 session = fastf1.get_session(year, round_num, session_code)
-                session.load(laps=False, telemetry=False, weather=False, messages=False)
+                if session_label == "race" and pull_weather:
+                    # laps=True is needed for track_status (safety car);
+                    # telemetry stays off, that's the expensive part we
+                    # don't need for this.
+                    session.load(laps=True, telemetry=False, weather=True, messages=True)
+                else:
+                    session.load(laps=False, telemetry=False, weather=False, messages=False)
             except Exception as exc:
                 print(f"  skip {year} R{round_num} {event_name} {session_label}: {exc}")
                 continue
@@ -46,6 +96,12 @@ def pull_season(year: int) -> pd.DataFrame:
             results = session.results
             if results is None or results.empty:
                 continue
+
+            conditions = (
+                race_conditions(session)
+                if session_label == "race" and pull_weather
+                else {"rained": None, "avg_track_temp": None, "safety_car": None}
+            )
 
             for _, r in results.iterrows():
                 rows.append(
@@ -77,6 +133,9 @@ def pull_season(year: int) -> pd.DataFrame:
                                 )
                             )
                         ),
+                        "rained": conditions["rained"],
+                        "avg_track_temp": conditions["avg_track_temp"],
+                        "safety_car": conditions["safety_car"],
                     }
                 )
             time.sleep(0.5)  # be polite to the API

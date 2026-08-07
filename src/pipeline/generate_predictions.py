@@ -13,11 +13,11 @@ import pickle
 from pathlib import Path
 
 import fastf1
-import numpy as np
 import pandas as pd
 
-from build_features import driver_archetype_blend, team_form_blend, era_for_season
+from build_features import driver_archetype_blend, team_form_blend, circuit_conditions_blend, era_for_season
 from circuit_lookup import event_to_circuit_key
+from train_model import FEATURE_COLS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROCESSED_DIR = REPO_ROOT / "data" / "processed"
@@ -58,12 +58,19 @@ def build_snapshot_rows(
     grid: pd.DataFrame,
     archetype: str,
     era: str,
+    circuit_key: str,
     is_sprint_weekend: bool,
     feature_state: dict,
 ) -> pd.DataFrame:
     driver_history = feature_state["driver_history"]
     debut_prior = feature_state["debut_prior"]
     team_history = feature_state["team_history"]
+    circuit_history = feature_state["circuit_history"]
+    circuit_global_prior = feature_state["circuit_global_prior"]
+
+    wet_prob, sc_prob, _ = circuit_conditions_blend(
+        circuit_history.get(circuit_key, []), circuit_global_prior
+    )
 
     rows = []
     for _, r in grid.iterrows():
@@ -73,7 +80,7 @@ def build_snapshot_rows(
         )
 
         t_key = (r["team"], era)
-        t_avg_finish, t_avg_points, t_trend, t_n = team_form_blend(team_history.get(t_key, []))
+        t_stats = team_form_blend(team_history.get(t_key, []))
 
         rows.append(
             {
@@ -86,10 +93,14 @@ def build_snapshot_rows(
                 "driver_archetype_avg_quali_gap": avg_gap,
                 "driver_archetype_avg_points": avg_points,
                 "driver_archetype_race_count": d_n,
-                "team_form_avg_finish": t_avg_finish,
-                "team_form_avg_points": t_avg_points,
-                "team_form_trend_slope": t_trend,
-                "team_form_race_count": t_n,
+                "team_form_avg_finish": t_stats["avg_finish"],
+                "team_form_avg_points": t_stats["avg_points"],
+                "team_form_avg_quali_gap": t_stats["avg_quali_gap"],
+                "team_form_trend_slope": t_stats["trend_finish"],
+                "team_form_quali_trend_slope": t_stats["trend_quali"],
+                "team_form_race_count": t_stats["n"],
+                "circuit_wet_probability": wet_prob,
+                "circuit_safety_car_probability": sc_prob,
             }
         )
     return pd.DataFrame(rows)
@@ -110,27 +121,20 @@ def main():
 
     grid = current_grid(features_df)
     snapshot = build_snapshot_rows(
-        grid, archetype, era, next_race["is_sprint_weekend"], feature_state
+        grid, archetype, era, next_race["circuit_key"], next_race["is_sprint_weekend"], feature_state
     )
 
-    feature_cols = [
-        "archetype",
-        "is_sprint_weekend",
-        "driver_archetype_avg_finish",
-        "driver_archetype_avg_quali_gap",
-        "driver_archetype_avg_points",
-        "driver_archetype_race_count",
-        "team_form_avg_finish",
-        "team_form_avg_points",
-        "team_form_trend_slope",
-        "team_form_race_count",
-    ]
     snapshot["archetype"] = snapshot["archetype"].astype("category")
 
     for target in ["quali_pace", "finish_position", "points"]:
         with open(MODELS_DIR / f"{target}.pkl", "rb") as f:
             model = pickle.load(f)
-        snapshot[f"predicted_{target}"] = model.predict(snapshot[feature_cols])
+        predictions = model.predict(snapshot[FEATURE_COLS])
+        if target == "points":
+            # points can't be negative; an unconstrained regressor can drift
+            # slightly below zero for a clearly-backmarker prediction
+            predictions = predictions.clip(min=0)
+        snapshot[f"predicted_{target}"] = predictions
 
     # rank-derive a clean predicted finishing order from the raw regressor
     # output so two drivers can't literally tie for the same position
