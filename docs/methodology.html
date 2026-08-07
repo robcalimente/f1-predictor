@@ -47,13 +47,25 @@
 
   .race-hero {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 1.1rem 1.3rem; margin-bottom: 1.2rem; display: flex; align-items: baseline;
-    justify-content: space-between; flex-wrap: wrap; gap: 0.6rem;
+    padding: 1.1rem 1.3rem; margin-bottom: 1.2rem; display: flex; align-items: center;
+    justify-content: space-between; flex-wrap: wrap; gap: 1rem;
   }
+  .race-hero-text { display: flex; flex-direction: column; gap: 0.5rem; min-width: 200px; }
   .race-hero .event { font-size: 1.15rem; font-weight: 700; }
   .archetype-tag {
+    display: inline-flex; align-items: center; gap: 0.4rem; width: fit-content;
     font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent);
-    border: 1px solid rgba(227,166,63,0.4); border-radius: 999px; padding: 0.2rem 0.6rem;
+    border: 1px solid rgba(227,166,63,0.4); border-radius: 999px; padding: 0.2rem 0.6rem 0.2rem 0.5rem;
+  }
+  .archetype-motif { flex: none; display: block; }
+  .track-outline { width: 200px; height: 120px; flex: none; }
+  .track-outline-empty {
+    width: 200px; height: 120px; flex: none; display: flex; align-items: center;
+    justify-content: center; color: var(--text-muted); font-size: 0.75rem; text-align: center;
+    border: 1px dashed var(--border); border-radius: 8px;
+  }
+  @media (max-width: 640px) {
+    .track-outline, .track-outline-empty { width: 100%; }
   }
 
   table { border-collapse: collapse; width: 100%; }
@@ -115,7 +127,7 @@
       <a href="methodology.html" class="active">How this works</a>
       <a href="https://github.com/robcalimente/f1-predictor" class="">GitHub</a>
     </nav>
-    <span class="status-pill"><span class="status-dot"></span>Updated 2026-08-07 14:04 UTC</span>
+    <span class="status-pill"><span class="status-dot"></span>Updated 2026-08-07 14:20 UTC</span>
   </div>
 </header>
 

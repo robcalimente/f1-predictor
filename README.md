@@ -4,7 +4,8 @@
 [![Post-race scoring](https://github.com/robcalimente/f1-predictor/actions/workflows/post_race.yml/badge.svg)](https://github.com/robcalimente/f1-predictor/actions/workflows/post_race.yml)
 
 Predicts Formula 1 driver and team performance by track archetype: qualifying pace (% gap to pole),
-finishing position, and points, split out separately for drivers and constructors.
+finishing position, and points, split out separately for drivers and constructors. Every circuit's
+outline is real GPS telemetry from that track's most recent race, not a stock image.
 
 **Live dashboard: [robcalimente.github.io/f1-predictor](https://robcalimente.github.io/f1-predictor/)**
 

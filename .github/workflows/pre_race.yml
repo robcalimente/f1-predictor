@@ -41,6 +41,9 @@ jobs:
       - name: Generate next-race predictions
         run: python src/pipeline/generate_predictions.py
 
+      - name: Extract any new circuit track shapes
+        run: python src/pipeline/pull_track_shapes.py
+
       - name: Evaluate
         run: python src/pipeline/evaluate.py
 
@@ -51,6 +54,6 @@ jobs:
         run: |
           git config user.name "f1-predictor-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add data/processed docs models
+          git add data/processed data/track_shapes.json docs models
           git diff --cached --quiet || git commit -m "Pre-race predictions refresh [skip ci]"
           git push

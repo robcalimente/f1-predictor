@@ -30,6 +30,60 @@ ARCHETYPE_LABELS = {
     "medium_hybrid": "Medium / hybrid",
 }
 
+# Hand-drawn abstractions, not literal circuit shapes -- a quick visual
+# shorthand for what kind of track this is, distinct from the real traced
+# outlines (which come from actual telemetry, see track_shapes.json).
+ARCHETYPE_MOTIFS = {
+    "street": "M4,22 L14,22 L18,8 L28,24 L32,8 L42,22 L56,22",
+    "high_speed_power": "M4,22 C16,4 40,4 56,20",
+    "technical_low_speed": (
+        "M4,16 C8,6 16,6 16,16 C16,26 24,26 24,16 C24,6 32,6 32,16 "
+        "C32,26 40,26 44,16 C46,10 50,8 56,10"
+    ),
+    "elevation_change": "M4,22 L14,8 L24,20 L34,4 L44,20 L56,10",
+    "medium_hybrid": "M4,22 L16,22 C22,22 22,8 30,8 L42,8 C50,8 50,20 56,20",
+}
+MOTIF_VIEWBOX = "0 0 60 30"
+
+
+def archetype_motif_svg(archetype: str, dot: bool = True) -> str:
+    path_d = ARCHETYPE_MOTIFS.get(archetype)
+    if not path_d:
+        return ""
+    path_id = f"motif-{archetype}"
+    dot_svg = (
+        f'<circle r="2.2" fill="#edeff3"><animateMotion dur="2.4s" repeatCount="indefinite">'
+        f'<mpath href="#{path_id}" xlink:href="#{path_id}"/></animateMotion></circle>'
+        if dot
+        else ""
+    )
+    return (
+        f'<svg class="archetype-motif" viewBox="{MOTIF_VIEWBOX}" width="34" height="17">'
+        f'<path id="{path_id}" d="{path_d}" fill="none" stroke="var(--accent)" '
+        f'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>'
+        f"{dot_svg}</svg>"
+    )
+
+
+def track_outline_svg(circuit_key: str | None, track_shapes: dict, elem_id: str) -> str:
+    shape = track_shapes.get(circuit_key) if circuit_key else None
+    if not shape:
+        return '<div class="track-outline track-outline-empty">Track outline unavailable</div>'
+    path_id = f"track-path-{elem_id}"
+    return f"""
+    <svg class="track-outline" viewBox="{shape['viewBox']}">
+      <path id="{path_id}" d="{shape['path_d']}" fill="none" stroke="var(--border)"
+            stroke-width="10" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="{shape['path_d']}" fill="none" stroke="var(--accent)"
+            stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle r="5" fill="#edeff3" stroke="var(--bg)" stroke-width="1.5">
+        <animateMotion dur="5s" repeatCount="indefinite" rotate="auto">
+          <mpath href="#{path_id}" xlink:href="#{path_id}"/>
+        </animateMotion>
+      </circle>
+    </svg>
+    """
+
 # Real team liveries. A team rename (e.g. Toro Rosso -> AlphaTauri -> RB)
 # keeps a related but distinct hue so the lineage is still legible at a
 # glance; colors are identity chips always paired with the team name text,
@@ -114,13 +168,25 @@ PAGE_STYLE_TEMPLATE = """
 
   .race-hero {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 1.1rem 1.3rem; margin-bottom: 1.2rem; display: flex; align-items: baseline;
-    justify-content: space-between; flex-wrap: wrap; gap: 0.6rem;
+    padding: 1.1rem 1.3rem; margin-bottom: 1.2rem; display: flex; align-items: center;
+    justify-content: space-between; flex-wrap: wrap; gap: 1rem;
   }
+  .race-hero-text { display: flex; flex-direction: column; gap: 0.5rem; min-width: 200px; }
   .race-hero .event { font-size: 1.15rem; font-weight: 700; }
   .archetype-tag {
+    display: inline-flex; align-items: center; gap: 0.4rem; width: fit-content;
     font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent);
-    border: 1px solid rgba(227,166,63,0.4); border-radius: 999px; padding: 0.2rem 0.6rem;
+    border: 1px solid rgba(227,166,63,0.4); border-radius: 999px; padding: 0.2rem 0.6rem 0.2rem 0.5rem;
+  }
+  .archetype-motif { flex: none; display: block; }
+  .track-outline { width: 200px; height: 120px; flex: none; }
+  .track-outline-empty {
+    width: 200px; height: 120px; flex: none; display: flex; align-items: center;
+    justify-content: center; color: var(--text-muted); font-size: 0.75rem; text-align: center;
+    border: 1px dashed var(--border); border-radius: 8px;
+  }
+  @media (max-width: 640px) {
+    .track-outline, .track-outline-empty { width: 100%; }
   }
 
   table { border-collapse: collapse; width: 100%; }
@@ -255,7 +321,7 @@ def delta_status(target: str, actual: float, predicted: float) -> tuple[str, str
 
 
 def build_race_history(wf: pd.DataFrame, features: pd.DataFrame) -> list[dict]:
-    event_lookup = features[["season", "round", "event_name"]].drop_duplicates()
+    event_lookup = features[["season", "round", "event_name", "circuit_key"]].drop_duplicates()
     name_lookup = features[["driver", "driver_full_name"]].drop_duplicates("driver").set_index("driver")[
         "driver_full_name"
     ]
@@ -273,6 +339,7 @@ def build_race_history(wf: pd.DataFrame, features: pd.DataFrame) -> list[dict]:
     for (season, rnd), race_df in wide.groupby(["season", "round"]):
         event_row = event_lookup[(event_lookup["season"] == season) & (event_lookup["round"] == rnd)]
         event_name = event_row["event_name"].iloc[0] if not event_row.empty else f"Round {rnd}"
+        circuit_key = event_row["circuit_key"].iloc[0] if not event_row.empty else None
         archetype = race_df["archetype"].iloc[0]
 
         drivers = []
@@ -308,7 +375,9 @@ def build_race_history(wf: pd.DataFrame, features: pd.DataFrame) -> list[dict]:
                 "season": int(season),
                 "round": int(rnd),
                 "event_name": event_name,
-                "archetype": ARCHETYPE_LABELS.get(archetype, archetype),
+                "circuit_key": circuit_key,
+                "archetype": archetype,
+                "archetype_label": ARCHETYPE_LABELS.get(archetype, archetype),
                 "drivers": drivers,
             }
         )
@@ -317,12 +386,15 @@ def build_race_history(wf: pd.DataFrame, features: pd.DataFrame) -> list[dict]:
     return races
 
 
-def history_browser_html(races: list[dict]) -> str:
+def history_browser_html(races: list[dict], track_shapes: dict) -> str:
     options = "".join(
         f'<option value="{r["key"]}">{r["season"]} R{r["round"]} — {r["event_name"]}</option>'
         for r in races
     )
     races_json = json.dumps(races)
+    shapes_json = json.dumps(track_shapes)
+    motifs_json = json.dumps(ARCHETYPE_MOTIFS)
+    labels_json = json.dumps(ARCHETYPE_LABELS)
     return f"""
 <div class="picker-row">
   <select id="race-picker">{options}</select>
@@ -334,13 +406,20 @@ def history_browser_html(races: list[dict]) -> str:
 <div id="race-detail"></div>
 
 <script id="race-data" type="application/json">{races_json}</script>
+<script id="track-shapes-data" type="application/json">{shapes_json}</script>
+<script id="archetype-motifs-data" type="application/json">{motifs_json}</script>
+<script id="archetype-labels-data" type="application/json">{labels_json}</script>
 <script>
 (function() {{
   const races = JSON.parse(document.getElementById('race-data').textContent);
+  const trackShapes = JSON.parse(document.getElementById('track-shapes-data').textContent);
+  const motifs = JSON.parse(document.getElementById('archetype-motifs-data').textContent);
+  const archetypeLabels = JSON.parse(document.getElementById('archetype-labels-data').textContent);
   const picker = document.getElementById('race-picker');
   const detail = document.getElementById('race-detail');
   const prevBtn = document.getElementById('race-prev');
   const nextBtn = document.getElementById('race-next');
+  let uid = 0;
 
   function metricCell(entry, key, unit) {{
     const m = entry[key];
@@ -348,6 +427,33 @@ def history_browser_html(races: list[dict]) -> str:
     return `<td class="num mono">${{m.pred}}${{unit}}</td>` +
            `<td class="num mono">${{m.actual}}${{unit}}</td>` +
            `<td class="num"><span class="delta ${{m.delta_cls}}">${{m.delta_disp}}${{unit}}</span></td>`;
+  }}
+
+  function motifSvg(archetype) {{
+    const d = motifs[archetype];
+    if (!d) return '';
+    const id = `motif-hist-${{uid++}}`;
+    return `<svg class="archetype-motif" viewBox="0 0 60 30" width="34" height="17">
+      <path id="${{id}}" d="${{d}}" fill="none" stroke="var(--accent)" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <circle r="2.2" fill="#edeff3"><animateMotion dur="2.4s" repeatCount="indefinite">
+        <mpath href="#${{id}}" xlink:href="#${{id}}"/></animateMotion></circle>
+    </svg>`;
+  }}
+
+  function trackSvg(circuitKey) {{
+    const shape = trackShapes[circuitKey];
+    if (!shape) return '<div class="track-outline track-outline-empty">Track outline unavailable</div>';
+    const id = `track-hist-${{uid++}}`;
+    return `<svg class="track-outline" viewBox="${{shape.viewBox}}">
+      <path id="${{id}}" d="${{shape.path_d}}" fill="none" stroke="var(--border)" stroke-width="10"
+            stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${{shape.path_d}}" fill="none" stroke="var(--accent)" stroke-width="2.5"
+            stroke-linejoin="round" stroke-linecap="round"/>
+      <circle r="5" fill="#edeff3" stroke="var(--bg)" stroke-width="1.5">
+        <animateMotion dur="5s" repeatCount="indefinite" rotate="auto"><mpath href="#${{id}}" xlink:href="#${{id}}"/></animateMotion>
+      </circle>
+    </svg>`;
   }}
 
   function render(key) {{
@@ -368,8 +474,11 @@ def history_browser_html(races: list[dict]) -> str:
 
     detail.innerHTML = `
       <div class="race-hero">
-        <span class="event">${{race.season}} Round ${{race.round}} — ${{race.event_name}}</span>
-        <span class="archetype-tag">${{race.archetype}}</span>
+        <div class="race-hero-text">
+          <span class="event">${{race.season}} Round ${{race.round}} — ${{race.event_name}}</span>
+          <span class="archetype-tag">${{motifSvg(race.archetype)}}${{archetypeLabels[race.archetype] || race.archetype}}</span>
+        </div>
+        ${{trackSvg(race.circuit_key)}}
       </div>
       <div class="table-scroll">
       <table>
@@ -462,9 +571,11 @@ def headline_cards_html(metrics: dict) -> str:
     return f'<div class="stat-rail">{"".join(cards)}</div>'
 
 
-def build_index_html(next_race: pd.DataFrame, wf: pd.DataFrame, features: pd.DataFrame, metrics: dict, generated_at: str) -> str:
+def build_index_html(next_race: pd.DataFrame, wf: pd.DataFrame, features: pd.DataFrame, metrics: dict, track_shapes: dict, generated_at: str) -> str:
     event_name = next_race["event_name"].iloc[0]
-    archetype = ARCHETYPE_LABELS.get(next_race["archetype"].iloc[0], next_race["archetype"].iloc[0])
+    archetype_key = next_race["archetype"].iloc[0]
+    archetype_label = ARCHETYPE_LABELS.get(archetype_key, archetype_key)
+    next_circuit_key = next_race["circuit_key"].iloc[0] if "circuit_key" in next_race.columns else None
     scatter_html = scatter_figure(wf).to_html(
         full_html=False, include_plotlyjs="cdn", config={"displayModeBar": False}
     )
@@ -485,8 +596,11 @@ position, and points -- separating a driver's slow-moving track skill from a tea
 
 <h2>Next race</h2>
 <div class="race-hero">
-  <span class="event">{event_name}</span>
-  <span class="archetype-tag">{archetype}</span>
+  <div class="race-hero-text">
+    <span class="event">{event_name}</span>
+    <span class="archetype-tag">{archetype_motif_svg(archetype_key)}{archetype_label}</span>
+  </div>
+  {track_outline_svg(next_circuit_key, track_shapes, "next")}
 </div>
 <p class="note">Predictions assume a clean race for every driver (no DNFs modeled).</p>
 {next_race_table_html(next_race)}
@@ -500,7 +614,7 @@ model ever seeing that race's actual result during training.</p>
 <h2>Race-by-race history</h2>
 <p class="note">Every race the model has scored, most recent first. Δ is actual minus predicted; green means
 the result beat the prediction, red means it missed.</p>
-{history_browser_html(races)}
+{history_browser_html(races, track_shapes)}
 
 <footer>Built from FastF1 data. See <a href="methodology.html">how this works</a> for the full methodology.</footer>
 </div>
@@ -650,9 +764,17 @@ def main():
         with open(shap_path) as f:
             shap_importance = json.load(f)
 
+    track_shapes = {}
+    shapes_path = REPO_ROOT / "data" / "track_shapes.json"
+    if shapes_path.exists():
+        with open(shapes_path) as f:
+            track_shapes = json.load(f)
+
     generated_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
-    (DOCS_DIR / "index.html").write_text(build_index_html(next_race, wf, features, metrics, generated_at))
+    (DOCS_DIR / "index.html").write_text(
+        build_index_html(next_race, wf, features, metrics, track_shapes, generated_at)
+    )
     (DOCS_DIR / "methodology.html").write_text(build_methodology_html(metrics, shap_importance, generated_at))
     print(f"Wrote {DOCS_DIR / 'index.html'} and {DOCS_DIR / 'methodology.html'}")
 

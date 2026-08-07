@@ -153,6 +153,7 @@ def main():
     snapshot["season"] = next_race["season"]
     snapshot["round"] = next_race["round"]
     snapshot["event_name"] = next_race["event_name"]
+    snapshot["circuit_key"] = next_race["circuit_key"]
 
     out_path = PROCESSED_DIR / "next_race_predictions.parquet"
     snapshot.to_parquet(out_path, index=False)
