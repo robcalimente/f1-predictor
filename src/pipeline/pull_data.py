@@ -52,14 +52,24 @@ WEATHER_MIN_SEASON = 2021
 def race_conditions(session) -> dict:
     """Weather + safety-car summary for one race session. Requires the
     session to have been loaded with laps=True (track_status needs it) and
-    weather=True."""
-    rained = False
+    weather=True. Any field FastF1 could not load comes back None (unknown)
+    rather than raising or defaulting to a fabricated "dry, no safety car"."""
+    rained = None
     avg_track_temp = None
-    if session.weather_data is not None and not session.weather_data.empty:
-        rained = bool(session.weather_data["Rainfall"].mean() > RAIN_FRACTION_THRESHOLD)
-        avg_track_temp = float(session.weather_data["TrackTemp"].mean())
+    try:
+        weather = session.weather_data
+        if weather is not None and not weather.empty:
+            rained = bool(weather["Rainfall"].mean() > RAIN_FRACTION_THRESHOLD)
+            avg_track_temp = float(weather["TrackTemp"].mean())
+    except Exception:
+        # session.load() only *warns* when a fetch fails -- the attribute
+        # access is what raises. Unguarded, that propagated out of
+        # pull_season() and made main() abandon the entire season. Leave the
+        # field unknown (null) rather than asserting a dry race; feature
+        # engineering already falls back to the circuit/global prior.
+        pass
 
-    safety_car = False
+    safety_car = None
     try:
         if session.track_status is not None and not session.track_status.empty:
             safety_car = bool(session.track_status["Status"].isin(SAFETY_CAR_STATUS_CODES).any())
@@ -144,6 +154,9 @@ def pull_season(year: int) -> pd.DataFrame:
 
 
 def main():
+    current_ok = False
+    current_note = "not attempted"
+
     for year in SEASON_RANGE:
         out_path = RAW_DIR / f"results_{year}.parquet"
         is_current_season = year == CURRENT_SEASON
@@ -156,10 +169,16 @@ def main():
             df = pull_season(year)
         except Exception as exc:
             print(f"{year}: failed entirely: {exc}")
+            if is_current_season:
+                current_note = f"pull raised {type(exc).__name__}: {exc}"
             continue
 
         if df.empty:
             print(f"{year}: no data returned (season may not have started yet)")
+            if is_current_season:
+                # Only legitimate before the season's opening race.
+                current_ok = not out_path.exists()
+                current_note = "pull returned no rows"
             continue
 
         if out_path.exists():
@@ -173,10 +192,42 @@ def main():
                     f"{year}: new pull has fewer rows ({len(df)}) than the existing "
                     f"file ({existing_rows}) -- keeping the existing file, not overwriting"
                 )
+                if is_current_season:
+                    current_note = (
+                        f"pull returned {len(df)} rows vs {existing_rows} already on disk"
+                    )
                 continue
 
         df.to_parquet(out_path, index=False)
         print(f"{year}: wrote {len(df)} rows to {out_path}")
+        if is_current_season:
+            current_ok = True
+            current_note = f"wrote {len(df)} rows"
+
+    check_current_season(current_ok, current_note)
+
+
+def check_current_season(ok: bool, note: str) -> None:
+    """Fail the run rather than let a stale current season through.
+
+    Everything downstream -- features, models, predictions, dashboard -- is
+    rebuilt unconditionally and republished with a fresh "Updated" timestamp.
+    So a swallowed pull failure doesn't show up as a broken build; it shows up
+    as a dashboard that confidently displays last month's data. Exiting
+    non-zero here is what makes that failure visible.
+    """
+    if CURRENT_SEASON not in SEASON_RANGE:
+        print(
+            f"{CURRENT_SEASON} is outside SEASON_RANGE {SEASON_RANGE.start}-"
+            f"{SEASON_RANGE.stop - 1}; extend it to keep pulling current results."
+        )
+        return
+    if not ok:
+        raise SystemExit(
+            f"ERROR {CURRENT_SEASON}: {note}. Refusing to continue -- the rest of the "
+            "pipeline would rebuild from the previous pull and republish the dashboard "
+            "with a fresh timestamp, hiding the fact that no new data arrived."
+        )
 
 
 if __name__ == "__main__":
