@@ -58,6 +58,7 @@ def build_snapshot_rows(
     grid: pd.DataFrame,
     archetype: str,
     era: str,
+    season: int,
     circuit_key: str,
     is_sprint_weekend: bool,
     feature_state: dict,
@@ -75,8 +76,8 @@ def build_snapshot_rows(
     rows = []
     for _, r in grid.iterrows():
         d_key = (r["driver"], archetype)
-        avg_finish, avg_gap, avg_points, d_n = driver_archetype_blend(
-            driver_history.get(d_key, []), debut_prior
+        skill = driver_archetype_blend(
+            driver_history.get(d_key, []), debut_prior, season
         )
 
         t_key = (r["team"], era)
@@ -89,15 +90,18 @@ def build_snapshot_rows(
                 "team": r["team"],
                 "archetype": archetype,
                 "is_sprint_weekend": int(is_sprint_weekend),
-                "driver_archetype_avg_finish": avg_finish,
-                "driver_archetype_avg_quali_gap": avg_gap,
-                "driver_archetype_avg_points": avg_points,
-                "driver_archetype_race_count": d_n,
+                "driver_archetype_teammate_finish_delta": skill["finish_delta"],
+                "driver_archetype_teammate_quali_delta": skill["quali_delta"],
+                "driver_archetype_teammate_points_delta": skill["points_delta"],
+                "driver_archetype_race_count": skill["n"],
                 "team_form_avg_finish": t_stats["avg_finish"],
                 "team_form_avg_points": t_stats["avg_points"],
                 "team_form_avg_quali_gap": t_stats["avg_quali_gap"],
                 "team_form_trend_slope": t_stats["trend_finish"],
                 "team_form_quali_trend_slope": t_stats["trend_quali"],
+                "team_form_avg_speed_trap_pct": t_stats["avg_speed_trap_pct"],
+                "team_form_avg_best_lap_pct_off": t_stats["avg_best_lap_pct_off"],
+                "team_form_speed_trap_trend": t_stats["trend_speed_trap"],
                 "team_form_race_count": t_stats["n"],
                 "circuit_wet_probability": wet_prob,
                 "circuit_safety_car_probability": sc_prob,
@@ -121,7 +125,8 @@ def main():
 
     grid = current_grid(features_df)
     snapshot = build_snapshot_rows(
-        grid, archetype, era, next_race["circuit_key"], next_race["is_sprint_weekend"], feature_state
+        grid, archetype, era, next_race["season"], next_race["circuit_key"],
+        next_race["is_sprint_weekend"], feature_state
     )
 
     snapshot["archetype"] = snapshot["archetype"].astype("category")

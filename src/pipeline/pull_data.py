@@ -79,6 +79,34 @@ def race_conditions(session) -> dict:
     return {"rained": rained, "avg_track_temp": avg_track_temp, "safety_car": safety_car}
 
 
+def session_speeds(session) -> dict:
+    """Per-driver pace summary from the lap data we already load for
+    track_status -- speed trap and best lap. Costs no extra API calls.
+
+    Raw values only; they are meaningless across circuits until normalized
+    within a race (340 km/h at Monza and 300 at Monaco can say the same thing
+    about a car relative to its field), which build_features does.
+    """
+    speeds = {}
+    try:
+        laps = session.laps
+    except Exception:
+        return speeds
+    if laps is None or laps.empty or "Driver" not in laps.columns:
+        return speeds
+
+    for drv, g in laps.groupby("Driver"):
+        trap = g["SpeedST"].median() if "SpeedST" in g.columns else None
+        lap_times = g["LapTime"].dropna() if "LapTime" in g.columns else []
+        speeds[str(drv)] = {
+            "speed_trap_median": float(trap) if trap is not None and pd.notna(trap) else None,
+            "best_lap_seconds": (
+                float(lap_times.min().total_seconds()) if len(lap_times) else None
+            ),
+        }
+    return speeds
+
+
 def pull_season(year: int) -> pd.DataFrame:
     schedule = fastf1.get_event_schedule(year, include_testing=False)
     rows = []
@@ -111,6 +139,12 @@ def pull_season(year: int) -> pd.DataFrame:
                 race_conditions(session)
                 if session_label == "race" and pull_weather
                 else {"rained": None, "avg_track_temp": None, "safety_car": None}
+            )
+
+            speeds = (
+                session_speeds(session)
+                if session_label == "race" and pull_weather
+                else {}
             )
 
             for _, r in results.iterrows():
@@ -146,6 +180,12 @@ def pull_season(year: int) -> pd.DataFrame:
                         "rained": conditions["rained"],
                         "avg_track_temp": conditions["avg_track_temp"],
                         "safety_car": conditions["safety_car"],
+                        "speed_trap_median": speeds.get(
+                            str(r.get("Abbreviation", "")), {}
+                        ).get("speed_trap_median"),
+                        "best_lap_seconds": speeds.get(
+                            str(r.get("Abbreviation", "")), {}
+                        ).get("best_lap_seconds"),
                     }
                 )
             time.sleep(0.5)  # be polite to the API

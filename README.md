@@ -16,13 +16,18 @@ outline is real GPS telemetry from that track's most recent race, not a stock im
 A gradient-boosted model trained on 2018-2026 F1 data (via [FastF1](https://github.com/theOehrly/Fast-F1))
 that separates two signals that move at very different speeds:
 
-- **Driver skill by track archetype** — a slow-moving signal computed across the full 2018-2026 window,
-  since a driver's ability at street circuits vs. high-speed circuits vs. technical tracks persists
-  across different cars and regulation eras.
+- **Driver skill by track archetype** — a slow-moving signal measured *relative to the driver's own
+  teammate*, in the same car, at each archetype, and decayed with a 2.5-season half-life. Measuring
+  absolute results instead makes this a proxy for whichever car the driver happened to have: George
+  Russell scored near-zero at high-speed circuits in a 2019 Williams, which is a fact about the
+  Williams. Differencing against the teammate holds the car constant.
 - **Team/car form** — a fast-moving signal computed from each team's last 3-5 races plus an in-season
   trend term, reset at known regulation-change boundaries (2022, 2026). This is what captures a team
   going from back-of-the-grid to front-running (or vice versa) within a season as they bring upgrades.
-  Race-pace form and qualifying-pace form are tracked separately.
+  Race-pace form and qualifying-pace form are tracked separately, alongside raw car pace — speed-trap
+  and best-lap, each normalized within its own race so a 340 km/h trap at Monza and a 300 km/h trap at
+  Monaco say the same thing about a car relative to that day's field. Points-based form alone cannot
+  tell you *why* a team scores; straight-line speed is what decides a power circuit like Monza.
 
 It also uses each circuit's historical **wet-race** and **safety-car** rates — a circuit-level tendency
 known in advance, not a live weather forecast the model can't actually have for a future race.
@@ -34,18 +39,18 @@ Full methodology, including the accuracy breakdown, model choice, and known limi
 
 ## Results
 
-Across 2,439 walk-forward-validated driver-race predictions (2020-2026):
+Across 2,455 walk-forward-validated driver-race predictions (2020-2026):
 
 | Metric | Result |
 |---|---|
-| Pole position called correctly | 22.7% |
-| Race winner called correctly | 31.0% |
-| Exact podium (top 3) match | 11.3% |
-| Avg. overlap with actual points scorers (top 10) | 80.7% |
-| Qualifying pace MAE | 1.33 (% gap to pole) |
-| Finishing position MAE | 2.97 positions |
-| Points MAE / R² | 3.88 / 0.47 |
-| Finish-position Spearman rank correlation | 0.67 |
+| Pole position called correctly | 26.8% |
+| Race winner called correctly | 45.5% |
+| Exact podium (top 3) match | 14.0% |
+| Avg. overlap with actual points scorers (top 10) | 79.8% |
+| Qualifying pace MAE | 1.31 (% gap to pole) |
+| Finishing position MAE | 2.90 positions |
+| Points MAE / R² | 3.82 / 0.49 |
+| Finish-position Spearman rank correlation | 0.69 |
 
 The dashboard's ["How this works"](https://robcalimente.github.io/f1-predictor/methodology.html) page also
 shows the model measured against a naive "everyone finishes where they qualified" baseline, and breaks

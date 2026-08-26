@@ -1,12 +1,19 @@
 """Build the driver-race feature table from raw FastF1 pulls.
 
 Two-speed feature design:
-  - driver_archetype_* : slow signal, expanding mean over ALL prior seasons
-    (2018-2026) of a driver's performance at this track archetype. Shrunk
+  - driver_archetype_* : slow signal, a driver's performance at this track
+    archetype measured RELATIVE TO THEIR TEAMMATE and recency-weighted.
+    Absolute results at an archetype mostly measure the car the driver
+    happened to be in (Russell averaged near-zero points at high-speed
+    circuits in a 2019 Williams; that is a fact about the Williams).
+    Differencing against the teammate holds the car constant, and an
+    exponential decay by season stops 2018 outvoting this year. Shrunk
     toward a "debut driver" prior when a driver has few/no prior races at
     that archetype (rookie / archetype debut cold start).
   - team_form_*        : fast signal, rolling mean over the team's last up
-    to 5 races plus a trend slope, reset at each regulation-era boundary
+    to 5 races plus a trend slope -- results AND raw car pace (speed trap,
+    best lap), each normalized within its race so circuits compare. Reset
+    at each regulation-era boundary
     (2018-2021, 2022-2025, 2026+) and by team name (a team rename, e.g.
     Racing Point -> Aston Martin, is treated as a fresh entity -- a known
     limitation, noted on the methodology page).
@@ -28,6 +35,12 @@ ARCHETYPE_CSV = REPO_ROOT / "data" / "circuit_archetypes.csv"
 
 ROOKIE_SHRINKAGE_K = 3  # pseudo-count weight given to the debut prior
 TEAM_FORM_WINDOW = 5
+
+# Half-life, in seasons, for weighting a driver's past results at an
+# archetype. At 2.5, a result from two and a half seasons ago counts half as
+# much as this season's, so the signal tracks the current driver rather than
+# their whole career.
+DRIVER_RECENCY_HALFLIFE_SEASONS = 2.5
 
 # Status strings FastF1 reports for a car that finished / was classified,
 # including being lapped ("+1 Lap", "+2 Laps", ... or the literal "Lapped").
@@ -98,28 +111,99 @@ def build_race_level(raw: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def driver_archetype_blend(past: list[dict], debut_prior: dict) -> tuple[float, float, float, int]:
-    """Shrinkage-blended (avg_finish, avg_gap, avg_points, n) for a driver's
-    history at one archetype. Shared by build_features (historical rows) and
-    generate_predictions (next-race snapshot) so the blend math lives in
-    exactly one place.
+def add_race_relative_speed(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize raw pace within each race so it compares across circuits.
+
+    speed_trap_pct_of_best: this driver's median speed-trap as a percentage
+    of the fastest car's that race. best_lap_pct_off_best: how far off the
+    session's fastest lap, in percent. Absolute km/h is meaningless across
+    Monza and Monaco; position relative to the field that day is not.
+
+    Seasons before WEATHER_MIN_SEASON never load laps, so these are null
+    there and LightGBM handles them as missing.
+    """
+    for col in ("speed_trap_median", "best_lap_seconds"):
+        if col not in df.columns:
+            df[col] = np.nan
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    by_race = df.groupby("race_order")
+    trap_best = by_race["speed_trap_median"].transform("max")
+    df["speed_trap_pct_of_best"] = df["speed_trap_median"] / trap_best * 100
+
+    lap_best = by_race["best_lap_seconds"].transform("min")
+    df["best_lap_pct_off_best"] = (df["best_lap_seconds"] - lap_best) / lap_best * 100
+    return df
+
+
+def add_teammate_deltas(df: pd.DataFrame) -> pd.DataFrame:
+    """This driver's result minus their teammate's, same race, same car.
+
+    The car is held constant by construction, so the residual is much closer
+    to driver contribution than an absolute result is. Null when a team ran
+    only one car that race (nothing to difference against).
+    """
+    pairs = [
+        ("finish_position", "teammate_finish_delta"),
+        ("quali_pct_gap_to_pole", "teammate_quali_delta"),
+        ("points", "teammate_points_delta"),
+    ]
+    grouped = df.groupby(["race_order", "team"])
+    for col, out_col in pairs:
+        own = pd.to_numeric(df[col], errors="coerce")
+        team_sum = grouped[col].transform("sum")
+        team_n = grouped[col].transform("count")
+        others_mean = np.where(team_n > 1, (team_sum - own) / (team_n - 1), np.nan)
+        df[out_col] = own - others_mean
+    return df
+
+
+def _weighted_nanmean(values, weights) -> float:
+    v = np.asarray(values, dtype=float)
+    w = np.asarray(weights, dtype=float)
+    ok = np.isfinite(v) & np.isfinite(w)
+    if not ok.any() or w[ok].sum() == 0:
+        return np.nan
+    return float((v[ok] * w[ok]).sum() / w[ok].sum())
+
+
+DELTA_FIELDS = (
+    ("finish_delta", "teammate_finish_delta"),
+    ("quali_delta", "teammate_quali_delta"),
+    ("points_delta", "teammate_points_delta"),
+)
+
+
+def driver_archetype_blend(past: list[dict], debut_prior: dict, current_season: int) -> dict:
+    """Recency-weighted, teammate-relative skill at one archetype.
+
+    Returns the shrinkage-blended teammate deltas plus the raw race count.
+    Shared by build_features (historical rows) and generate_predictions
+    (next-race snapshot) so the blend math lives in exactly one place.
+
+    Shrinkage uses the EFFECTIVE sample size (the decayed weights summed),
+    not the raw count -- a driver with twenty stale races should be pulled
+    toward the debut prior more than one with five recent ones.
     """
     n = len(past)
     if n == 0:
-        return (
-            debut_prior["finish_position"],
-            debut_prior["quali_pct_gap_to_pole"],
-            debut_prior["points"],
-            0,
-        )
-    driver_mean_finish = np.nanmean([p["finish_position"] for p in past])
-    driver_mean_gap = np.nanmean([p["quali_pct_gap_to_pole"] for p in past])
-    driver_mean_points = np.nanmean([p["points"] for p in past])
-    w = n / (n + ROOKIE_SHRINKAGE_K)
-    avg_finish = w * driver_mean_finish + (1 - w) * debut_prior["finish_position"]
-    avg_gap = w * driver_mean_gap + (1 - w) * debut_prior["quali_pct_gap_to_pole"]
-    avg_points = w * driver_mean_points + (1 - w) * debut_prior["points"]
-    return avg_finish, avg_gap, avg_points, n
+        out = {key: debut_prior[key] for _, key in DELTA_FIELDS}
+        return {"finish_delta": out["teammate_finish_delta"],
+                "quali_delta": out["teammate_quali_delta"],
+                "points_delta": out["teammate_points_delta"],
+                "n": 0}
+
+    ages = np.array([current_season - p["season"] for p in past], dtype=float)
+    weights = 0.5 ** (np.clip(ages, 0, None) / DRIVER_RECENCY_HALFLIFE_SEASONS)
+    effective_n = float(weights.sum())
+    w = effective_n / (effective_n + ROOKIE_SHRINKAGE_K)
+
+    blended = {"n": n}
+    for out_key, hist_key in DELTA_FIELDS:
+        mean = _weighted_nanmean([p.get(hist_key) for p in past], weights)
+        prior = debut_prior[hist_key]
+        blended[out_key] = prior if not np.isfinite(mean) else w * mean + (1 - w) * prior
+    return blended
 
 
 def _trend_slope(values: np.ndarray) -> float:
@@ -133,7 +217,8 @@ def _trend_slope(values: np.ndarray) -> float:
 
 def team_form_blend(past: list[dict]) -> dict:
     """Rolling stats for a team's last TEAM_FORM_WINDOW races within one
-    era: avg finish/points/quali-gap, plus a trend slope for finish and for
+    era: avg finish/points/quali-gap and race-relative car pace (speed trap,
+    best lap), plus a trend slope for finish and for
     quali gap separately (a team's single-lap pace and its race-day
     execution can improve at different rates within a season). Shared by
     build_features (historical rows) and generate_predictions (next-race
@@ -144,17 +229,28 @@ def team_form_blend(past: list[dict]) -> dict:
     if n == 0:
         return {
             "avg_finish": np.nan, "avg_points": np.nan, "avg_quali_gap": np.nan,
-            "trend_finish": 0.0, "trend_quali": 0.0, "n": 0,
+            "trend_finish": 0.0, "trend_quali": 0.0,
+            "avg_speed_trap_pct": np.nan, "avg_best_lap_pct_off": np.nan,
+            "trend_speed_trap": 0.0, "n": 0,
         }
     finishes = np.array([p["finish_position"] for p in window], dtype=float)
     points_ = np.array([p["points"] for p in window], dtype=float)
     quali_gaps = np.array([p.get("quali_gap", np.nan) for p in window], dtype=float)
+    speed_trap = np.array([p.get("speed_trap_pct", np.nan) for p in window], dtype=float)
+    best_lap = np.array([p.get("best_lap_pct_off", np.nan) for p in window], dtype=float)
+
+    def _mean_or_nan(a):
+        return float(np.nanmean(a)) if np.isfinite(a).any() else np.nan
+
     return {
         "avg_finish": float(np.nanmean(finishes)),
         "avg_points": float(np.nanmean(points_)),
-        "avg_quali_gap": float(np.nanmean(quali_gaps)) if np.isfinite(quali_gaps).any() else np.nan,
+        "avg_quali_gap": _mean_or_nan(quali_gaps),
         "trend_finish": _trend_slope(finishes),
         "trend_quali": _trend_slope(quali_gaps),
+        "avg_speed_trap_pct": _mean_or_nan(speed_trap),
+        "avg_best_lap_pct_off": _mean_or_nan(best_lap),
+        "trend_speed_trap": _trend_slope(speed_trap),
         "n": n,
     }
 
@@ -167,37 +263,37 @@ def add_driver_archetype_skill(df: pd.DataFrame) -> tuple[pd.DataFrame, dict, di
     # the fallback for a driver with no history at a given archetype.
     df["_driver_race_seq"] = df.groupby("driver").cumcount()
     debut_rows = df[df["_driver_race_seq"] < ROOKIE_SHRINKAGE_K]
-    debut_prior = {
-        "finish_position": debut_rows["finish_position"].mean(),
-        "quali_pct_gap_to_pole": debut_rows["quali_pct_gap_to_pole"].mean(),
-        "points": debut_rows["points"].mean(),
-    }
+
+    def _debut_mean(col: str) -> float:
+        value = debut_rows[col].mean()
+        # A rookie is, on average, a little behind an established teammate;
+        # if that is somehow unmeasurable, "no different" is the safe prior.
+        return float(value) if np.isfinite(value) else 0.0
+
+    debut_prior = {key: _debut_mean(key) for _, key in DELTA_FIELDS}
 
     history: dict[tuple[str, str], list[dict]] = {}
     out_cols = {
-        "driver_archetype_avg_finish": [],
-        "driver_archetype_avg_quali_gap": [],
-        "driver_archetype_avg_points": [],
+        "driver_archetype_teammate_finish_delta": [],
+        "driver_archetype_teammate_quali_delta": [],
+        "driver_archetype_teammate_points_delta": [],
         "driver_archetype_race_count": [],
     }
 
     for _, row in df.iterrows():
         key = (row["driver"], row["archetype"])
         past = history.get(key, [])
-        avg_finish, avg_gap, avg_points, n = driver_archetype_blend(past, debut_prior)
+        blended = driver_archetype_blend(past, debut_prior, int(row["season"]))
 
-        out_cols["driver_archetype_avg_finish"].append(avg_finish)
-        out_cols["driver_archetype_avg_quali_gap"].append(avg_gap)
-        out_cols["driver_archetype_avg_points"].append(avg_points)
-        out_cols["driver_archetype_race_count"].append(n)
+        out_cols["driver_archetype_teammate_finish_delta"].append(blended["finish_delta"])
+        out_cols["driver_archetype_teammate_quali_delta"].append(blended["quali_delta"])
+        out_cols["driver_archetype_teammate_points_delta"].append(blended["points_delta"])
+        out_cols["driver_archetype_race_count"].append(blended["n"])
 
-        past.append(
-            {
-                "finish_position": row["finish_position"],
-                "quali_pct_gap_to_pole": row["quali_pct_gap_to_pole"],
-                "points": row["points"],
-            }
-        )
+        entry = {"season": int(row["season"])}
+        for _, hist_key in DELTA_FIELDS:
+            entry[hist_key] = row[hist_key]
+        past.append(entry)
         history[key] = past
 
     for col, values in out_cols.items():
@@ -235,6 +331,9 @@ def add_team_form(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
                     "team_form_avg_quali_gap": stats["avg_quali_gap"],
                     "team_form_trend_slope": stats["trend_finish"],
                     "team_form_quali_trend_slope": stats["trend_quali"],
+                    "team_form_avg_speed_trap_pct": stats["avg_speed_trap_pct"],
+                    "team_form_avg_best_lap_pct_off": stats["avg_best_lap_pct_off"],
+                    "team_form_speed_trap_trend": stats["trend_speed_trap"],
                     "team_form_race_count": stats["n"],
                 }
 
@@ -244,6 +343,8 @@ def add_team_form(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
                     "finish_position": team_rows["finish_position"].mean(),
                     "points": team_rows["points"].mean(),
                     "quali_gap": team_rows["quali_pct_gap_to_pole"].mean(),
+                    "speed_trap_pct": team_rows["speed_trap_pct_of_best"].mean(),
+                    "best_lap_pct_off": team_rows["best_lap_pct_off_best"].mean(),
                 }
             )
             history[key] = past
@@ -311,6 +412,8 @@ def main():
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     raw = load_raw()
     race_level = build_race_level(raw)
+    race_level = add_race_relative_speed(race_level)
+    race_level = add_teammate_deltas(race_level)
     with_driver_skill, driver_history, debut_prior = add_driver_archetype_skill(race_level)
     with_team_form, team_history = add_team_form(with_driver_skill)
     with_conditions, circuit_history, circuit_global_prior = add_circuit_conditions(with_team_form)
@@ -330,8 +433,8 @@ def main():
     out.to_parquet(out_path, index=False)
     print(f"Wrote {len(out)} rows to {out_path}")
     print(out[["season", "round", "driver", "team", "archetype",
-               "driver_archetype_avg_finish", "team_form_avg_finish",
-               "team_form_trend_slope"]].tail(10).to_string())
+               "driver_archetype_teammate_finish_delta", "team_form_avg_finish",
+               "team_form_avg_speed_trap_pct"]].tail(10).to_string())
 
 
 if __name__ == "__main__":
