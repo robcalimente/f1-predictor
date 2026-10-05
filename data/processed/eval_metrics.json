@@ -1,9 +1,9 @@
 {
   "quali_pace": {
-    "headline_mae": 1.291214986740983,
-    "r_squared": 0.010116297453275025,
-    "spearman_rank_correlation": 0.5616028686384025,
-    "n_predictions": 2884,
+    "headline_mae": 1.2849917323552662,
+    "r_squared": 0.011961260293938847,
+    "spearman_rank_correlation": 0.5633989335488756,
+    "n_predictions": 2906,
     "per_race": [
       {
         "season": 2020,
@@ -874,15 +874,21 @@
         "round": 15,
         "mae": 0.8966881909865548,
         "n_drivers": 22
+      },
+      {
+        "season": 2026,
+        "round": 16,
+        "mae": 0.4691796574276637,
+        "n_drivers": 22
       }
     ],
-    "pole_accuracy": 0.2620689655172414
+    "pole_accuracy": 0.2602739726027397
   },
   "finish_position": {
-    "headline_mae": 2.886188291511226,
-    "r_squared": 0.48316141562889703,
-    "spearman_rank_correlation": 0.693626604688501,
-    "n_predictions": 2507,
+    "headline_mae": 2.8857987609364084,
+    "r_squared": 0.4842041415656867,
+    "spearman_rank_correlation": 0.6941831488504244,
+    "n_predictions": 2526,
     "per_race": [
       {
         "season": 2020,
@@ -1759,20 +1765,26 @@
         "round": 15,
         "mae": 2.6202220348709813,
         "n_drivers": 15
+      },
+      {
+        "season": 2026,
+        "round": 16,
+        "mae": 2.8344012266697076,
+        "n_drivers": 19
       }
     ],
-    "podium_accuracy": 0.14383561643835616,
-    "winner_accuracy": 0.4246575342465753,
-    "top10_accuracy": 0.04794520547945205,
-    "top10_overlap": 0.797945205479452,
-    "grid_order_baseline_mae": 2.9329876346230552,
-    "improvement_over_baseline_pct": 0.015956201983048528
+    "podium_accuracy": 0.14285714285714285,
+    "winner_accuracy": 0.42857142857142855,
+    "top10_accuracy": 0.047619047619047616,
+    "top10_overlap": 0.798639455782313,
+    "grid_order_baseline_mae": 2.937450514647664,
+    "improvement_over_baseline_pct": 0.01758387195075903
   },
   "points": {
-    "headline_mae": 3.8393110365392156,
-    "r_squared": 0.49386439118779646,
-    "spearman_rank_correlation": 0.6811194886533609,
-    "n_predictions": 2507,
+    "headline_mae": 3.8351175061513687,
+    "r_squared": 0.4948696628588566,
+    "spearman_rank_correlation": 0.6815833382354506,
+    "n_predictions": 2526,
     "per_race": [
       {
         "season": 2020,
@@ -2649,6 +2661,12 @@
         "round": 15,
         "mae": 3.691658742235667,
         "n_drivers": 15
+      },
+      {
+        "season": 2026,
+        "round": 16,
+        "mae": 3.281792207081257,
+        "n_drivers": 19
       }
     ]
   }
