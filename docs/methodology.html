@@ -127,7 +127,7 @@
       <a href="methodology.html" class="active">How this works</a>
       <a href="https://github.com/robcalimente/f1-predictor" class="">GitHub</a>
     </nav>
-    <span class="status-pill"><span class="status-dot"></span>Updated 2026-10-22 14:30 UTC</span>
+    <span class="status-pill"><span class="status-dot"></span>Updated 2026-10-26 15:56 UTC</span>
   </div>
 </header>
 
@@ -180,34 +180,34 @@ not a random train/test split, which would leak future information into training
     <div class="table-scroll">
     <table>
       <tr><th>Target</th><th class="num">MAE</th><th class="num">R²</th><th class="num">Spearman ρ</th></tr>
-      <tr><td>Qualifying pace (% gap to pole)</td><td class='num mono'>1.275</td><td class='num mono'>0.018</td><td class='num mono'>0.572</td></tr>
-      <tr><td>Finishing position</td><td class='num mono'>2.899</td><td class='num mono'>0.481</td><td class='num mono'>0.692</td></tr>
-      <tr><td>Points</td><td class='num mono'>3.822</td><td class='num mono'>0.497</td><td class='num mono'>0.681</td></tr>
+      <tr><td>Qualifying pace (% gap to pole)</td><td class='num mono'>1.284</td><td class='num mono'>0.011</td><td class='num mono'>0.567</td></tr>
+      <tr><td>Finishing position</td><td class='num mono'>2.873</td><td class='num mono'>0.489</td><td class='num mono'>0.697</td></tr>
+      <tr><td>Points</td><td class='num mono'>3.825</td><td class='num mono'>0.496</td><td class='num mono'>0.684</td></tr>
     </table>
     </div>
 
     <div class="table-scroll" style="margin-top:1rem">
     <table>
       <tr><th>Set-based accuracy</th><th class="num">Rate</th></tr>
-      <tr><td>Winner called correctly</td><td class='num mono'>48.0%</td></tr>
-      <tr><td>Exact podium (top 3) match</td><td class='num mono'>13.5%</td></tr>
-      <tr><td>Exact points-scorers (top 10) match</td><td class='num mono'>4.1%</td></tr>
-      <tr><td>Avg. overlap with actual points scorers</td><td class='num mono'>80.1%</td></tr>
-      <tr><td>Pole position called correctly</td><td class='num mono'>23.1%</td></tr>
+      <tr><td>Winner called correctly</td><td class='num mono'>43.0%</td></tr>
+      <tr><td>Exact podium (top 3) match</td><td class='num mono'>14.8%</td></tr>
+      <tr><td>Exact points-scorers (top 10) match</td><td class='num mono'>4.7%</td></tr>
+      <tr><td>Avg. overlap with actual points scorers</td><td class='num mono'>79.9%</td></tr>
+      <tr><td>Pole position called correctly</td><td class='num mono'>25.7%</td></tr>
     </table>
     </div>
 
     <p class="note" style="margin-top:1rem">
     <strong>On the baseline comparison:</strong> a naive "everyone finishes where they qualified, nobody
-    overtakes" baseline scores 2.936 MAE on this same set of races — almost
-    identical to the model's 2.899. That's not a hidden weakness so much as a fact about
+    overtakes" baseline scores 2.929 MAE on this same set of races — almost
+    identical to the model's 2.873. That's not a hidden weakness so much as a fact about
     modern F1: on most tracks, grid position already explains most of the finishing order, because overtaking
-    is hard. Spearman rank correlation (0.692) and the points R²
-    (0.497) are the more informative numbers here — they show the model captures who
+    is hard. Spearman rank correlation (0.697) and the points R²
+    (0.496) are the more informative numbers here — they show the model captures who
     outperforms their grid slot, not just who started where.</p>
     
 
-<h2>What drives each prediction</h2><div class="shap-grid"><div class="shap-card"><h3>quali_pace</h3><ol><li><span class='mono'>team_form_avg_points</span>: 0.40</li><li><span class='mono'>team_form_avg_quali_gap</span>: 0.36</li><li><span class='mono'>team_form_speed_trap_trend</span>: 0.15</li><li><span class='mono'>circuit_safety_car_probability</span>: 0.14</li><li><span class='mono'>circuit_wet_probability</span>: 0.13</li></ol></div><div class="shap-card"><h3>finish_position</h3><ol><li><span class='mono'>team_form_avg_points</span>: 2.73</li><li><span class='mono'>driver_archetype_teammate_points_delta</span>: 0.46</li><li><span class='mono'>team_form_avg_finish</span>: 0.40</li><li><span class='mono'>team_form_avg_quali_gap</span>: 0.38</li><li><span class='mono'>driver_archetype_teammate_quali_delta</span>: 0.32</li></ol></div><div class="shap-card"><h3>points</h3><ol><li><span class='mono'>team_form_avg_points</span>: 4.00</li><li><span class='mono'>driver_archetype_teammate_points_delta</span>: 0.80</li><li><span class='mono'>team_form_avg_quali_gap</span>: 0.71</li><li><span class='mono'>driver_archetype_teammate_quali_delta</span>: 0.39</li><li><span class='mono'>team_form_avg_finish</span>: 0.28</li></ol></div></div>
+<h2>What drives each prediction</h2><div class="shap-grid"><div class="shap-card"><h3>quali_pace</h3><ol><li><span class='mono'>team_form_avg_points</span>: 0.43</li><li><span class='mono'>team_form_avg_quali_gap</span>: 0.34</li><li><span class='mono'>team_form_speed_trap_trend</span>: 0.16</li><li><span class='mono'>driver_archetype_teammate_points_delta</span>: 0.14</li><li><span class='mono'>circuit_wet_probability</span>: 0.13</li></ol></div><div class="shap-card"><h3>finish_position</h3><ol><li><span class='mono'>team_form_avg_points</span>: 2.75</li><li><span class='mono'>driver_archetype_teammate_points_delta</span>: 0.48</li><li><span class='mono'>team_form_avg_finish</span>: 0.42</li><li><span class='mono'>team_form_avg_quali_gap</span>: 0.38</li><li><span class='mono'>driver_archetype_teammate_quali_delta</span>: 0.31</li></ol></div><div class="shap-card"><h3>points</h3><ol><li><span class='mono'>team_form_avg_points</span>: 3.95</li><li><span class='mono'>driver_archetype_teammate_points_delta</span>: 0.83</li><li><span class='mono'>team_form_avg_quali_gap</span>: 0.72</li><li><span class='mono'>driver_archetype_teammate_quali_delta</span>: 0.39</li><li><span class='mono'>team_form_avg_finish</span>: 0.27</li></ol></div></div>
 
 <h2>Known limitations</h2>
 <ul>
