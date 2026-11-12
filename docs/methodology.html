@@ -127,7 +127,7 @@
       <a href="methodology.html" class="active">How this works</a>
       <a href="https://github.com/robcalimente/f1-predictor" class="">GitHub</a>
     </nav>
-    <span class="status-pill"><span class="status-dot"></span>Updated 2026-11-09 19:35 UTC</span>
+    <span class="status-pill"><span class="status-dot"></span>Updated 2026-11-12 17:32 UTC</span>
   </div>
 </header>
 
@@ -180,7 +180,7 @@ not a random train/test split, which would leak future information into training
     <div class="table-scroll">
     <table>
       <tr><th>Target</th><th class="num">MAE</th><th class="num">R²</th><th class="num">Spearman ρ</th></tr>
-      <tr><td>Qualifying pace (% gap to pole)</td><td class='num mono'>1.293</td><td class='num mono'>0.018</td><td class='num mono'>0.579</td></tr>
+      <tr><td>Qualifying pace (% gap to pole)</td><td class='num mono'>1.293</td><td class='num mono'>0.018</td><td class='num mono'>0.580</td></tr>
       <tr><td>Finishing position</td><td class='num mono'>2.890</td><td class='num mono'>0.488</td><td class='num mono'>0.696</td></tr>
       <tr><td>Points</td><td class='num mono'>3.792</td><td class='num mono'>0.498</td><td class='num mono'>0.684</td></tr>
     </table>
@@ -207,7 +207,7 @@ not a random train/test split, which would leak future information into training
     outperforms their grid slot, not just who started where.</p>
     
 
-<h2>What drives each prediction</h2><div class="shap-grid"><div class="shap-card"><h3>quali_pace</h3><ol><li><span class='mono'>team_form_avg_points</span>: 0.42</li><li><span class='mono'>team_form_avg_quali_gap</span>: 0.33</li><li><span class='mono'>circuit_wet_probability</span>: 0.15</li><li><span class='mono'>team_form_speed_trap_trend</span>: 0.14</li><li><span class='mono'>driver_archetype_teammate_points_delta</span>: 0.14</li></ol></div><div class="shap-card"><h3>finish_position</h3><ol><li><span class='mono'>team_form_avg_points</span>: 2.73</li><li><span class='mono'>driver_archetype_teammate_points_delta</span>: 0.46</li><li><span class='mono'>team_form_avg_finish</span>: 0.45</li><li><span class='mono'>team_form_avg_quali_gap</span>: 0.37</li><li><span class='mono'>driver_archetype_teammate_quali_delta</span>: 0.31</li></ol></div><div class="shap-card"><h3>points</h3><ol><li><span class='mono'>team_form_avg_points</span>: 4.05</li><li><span class='mono'>driver_archetype_teammate_points_delta</span>: 0.84</li><li><span class='mono'>team_form_avg_quali_gap</span>: 0.69</li><li><span class='mono'>driver_archetype_teammate_quali_delta</span>: 0.37</li><li><span class='mono'>team_form_avg_finish</span>: 0.26</li></ol></div></div>
+<h2>What drives each prediction</h2><div class="shap-grid"><div class="shap-card"><h3>quali_pace</h3><ol><li><span class='mono'>team_form_avg_points</span>: 0.42</li><li><span class='mono'>team_form_avg_quali_gap</span>: 0.33</li><li><span class='mono'>circuit_wet_probability</span>: 0.15</li><li><span class='mono'>team_form_speed_trap_trend</span>: 0.15</li><li><span class='mono'>driver_archetype_teammate_points_delta</span>: 0.13</li></ol></div><div class="shap-card"><h3>finish_position</h3><ol><li><span class='mono'>team_form_avg_points</span>: 2.73</li><li><span class='mono'>driver_archetype_teammate_points_delta</span>: 0.46</li><li><span class='mono'>team_form_avg_finish</span>: 0.45</li><li><span class='mono'>team_form_avg_quali_gap</span>: 0.37</li><li><span class='mono'>driver_archetype_teammate_quali_delta</span>: 0.31</li></ol></div><div class="shap-card"><h3>points</h3><ol><li><span class='mono'>team_form_avg_points</span>: 4.03</li><li><span class='mono'>driver_archetype_teammate_points_delta</span>: 0.84</li><li><span class='mono'>team_form_avg_quali_gap</span>: 0.69</li><li><span class='mono'>driver_archetype_teammate_quali_delta</span>: 0.37</li><li><span class='mono'>team_form_avg_finish</span>: 0.26</li></ol></div></div>
 
 <h2>Known limitations</h2>
 <ul>

@@ -1,9 +1,9 @@
 {
   "quali_pace": {
-    "headline_mae": 1.2934846264166526,
-    "r_squared": 0.01792574501511346,
-    "spearman_rank_correlation": 0.5791084740774273,
-    "n_predictions": 2993,
+    "headline_mae": 1.2929956895234382,
+    "r_squared": 0.018394030280436735,
+    "spearman_rank_correlation": 0.5796125207553869,
+    "n_predictions": 2992,
     "per_race": [
       {
         "season": 2020,
@@ -896,21 +896,21 @@
       {
         "season": 2026,
         "round": 19,
-        "mae": 1.1081624698818116,
-        "n_drivers": 22
+        "mae": 1.0072170048377063,
+        "n_drivers": 21
       },
       {
         "season": 2026,
         "round": 20,
-        "mae": 2.3261516621264526,
+        "mae": 2.3475895450761795,
         "n_drivers": 22
       }
     ],
     "pole_accuracy": 0.24666666666666667
   },
   "finish_position": {
-    "headline_mae": 2.890156695913374,
-    "r_squared": 0.4875802594360321,
+    "headline_mae": 2.8902297558172134,
+    "r_squared": 0.4875678818992456,
     "spearman_rank_correlation": 0.6957239960020429,
     "n_predictions": 2600,
     "per_race": [
@@ -1817,7 +1817,7 @@
       {
         "season": 2026,
         "round": 20,
-        "mae": 2.967620373986356,
+        "mae": 2.9771181614855053,
         "n_drivers": 20
       }
     ],
@@ -1826,11 +1826,11 @@
     "top10_accuracy": 0.039735099337748346,
     "top10_overlap": 0.8013245033112583,
     "grid_order_baseline_mae": 2.9565384615384613,
-    "improvement_over_baseline_pct": 0.022452529026307604
+    "improvement_over_baseline_pct": 0.022427817728014127
   },
   "points": {
-    "headline_mae": 3.7919184588107417,
-    "r_squared": 0.4984328411921205,
+    "headline_mae": 3.7919990818769747,
+    "r_squared": 0.49842732677641033,
     "spearman_rank_correlation": 0.6842555086985985,
     "n_predictions": 2600,
     "per_race": [
@@ -2737,7 +2737,7 @@
       {
         "season": 2026,
         "round": 20,
-        "mae": 4.068244551493223,
+        "mae": 4.078725550103433,
         "n_drivers": 20
       }
     ]
